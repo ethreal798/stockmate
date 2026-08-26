@@ -58,7 +58,7 @@ class FundRankingSyncService:
         open_rows: list[dict[str, Any]],
         exchange_rows: list[dict[str, Any]],
         money_rows: list[dict[str, Any]],
-    ) -> dict[str, int]:
+    ):
         # 1. 收集所有基金代码，查询 Fund 表获取 fund_id 映射
         all_codes = sorted(
             set(
