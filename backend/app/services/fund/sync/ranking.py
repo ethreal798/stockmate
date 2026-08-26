@@ -79,9 +79,6 @@ class FundRankingSyncService:
             money_rows = [r for r in money_rows if r["fund_code"] in fund_ids]
 
         # 2. 将各个类型排行榜数据进行入库
-        logger.info(
-            f"开始入库 open: {len(open_rows)} 条, exchange: {len(exchange_rows)} 条, money: {len(money_rows)} 条",
-        )
         await self._replace_latest(FundOpenRankLatest, open_rows, fund_ids)
         await self._replace_latest(FundExchangeRankLatest, exchange_rows, fund_ids)
         await self._replace_latest(FundMoneyRankLatest, money_rows, fund_ids)

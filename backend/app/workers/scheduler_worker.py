@@ -1,4 +1,6 @@
-"""Standalone APScheduler process for recurring background jobs."""
+"""Standalone APScheduler process for recurring background jobs.
+python -m app.workers.scheduler_worker
+"""
 
 import asyncio
 import logging
