@@ -22,11 +22,5 @@ async def fund_ranking_sync(db, params: dict[str, Any]) -> None:
     覆盖开放式基金净值陆续更新的时段。
     """
     service = FundRankingSyncService(db)
-    result = await service.fetch_and_sync()
-    logger.info(
-        "基金排行同步完成: open=%s, exchange=%s, money=%s, total=%s",
-        result.get("open", 0),
-        result.get("exchange", 0),
-        result.get("money", 0),
-        result.get("total", 0),
-    )
+    await service.fetch_and_sync()
+    logger.info(f"基金排行定时同步完成")

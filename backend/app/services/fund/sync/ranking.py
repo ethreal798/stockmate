@@ -86,16 +86,6 @@ class FundRankingSyncService:
         await self._replace_latest(FundExchangeRankLatest, exchange_rows, fund_ids)
         await self._replace_latest(FundMoneyRankLatest, money_rows, fund_ids)
 
-        # 3. 统计本次抓取结果
-        counts = {
-            "funds": len(fund_ids),
-            "open": len(open_rows),
-            "exchange": len(exchange_rows),
-            "money": len(money_rows),
-        }
-        logger.info("基金排行同步完成: %s", counts)
-        return counts
-
     async def _replace_latest(
         self,
         model: type[FundOpenRankLatest] | type[FundExchangeRankLatest] | type[FundMoneyRankLatest],
