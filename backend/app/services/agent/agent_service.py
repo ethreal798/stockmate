@@ -111,22 +111,32 @@ class AgentService:
 
     async def create_run(self, user_id: int, thread_id: uuid.UUID, request: AgentRunCreate) -> AgentRunResponse:
         """在指定会话内原子创建 Run、用户消息和助手占位消息。"""
+        # 1. 从 agent_runs 表中查询是否已存在相同 client_request_id 的任务
         existing = await self._get_by_client_request(user_id, request.client_request_id)
         if existing is not None:
+            # 如果存在相同 client_request_id 的任务，且指定的会话 ID 与该任务所属的会话 ID 不同，则抛出冲突异常（会话归属校验）
             if existing.thread_id != thread_id:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="client_request_id 已被其他会话使用")
             return self.to_run_response(existing)
-
+        # 2. 校验本次任务使用的模型配置（存在、属于当前用户且未禁用）
         model_config = await self.model_configs.resolve(user_id, request.model_config_id)
+        # 3. 设置会话行锁，确保并发情况下 对于同一会话只能有一个事务进行操作 因为接下来会进行Check-Then-Act 操作
         thread = await self.get_thread(user_id, thread_id, for_update=True)
+        # TODO: 存在幂等检查时序缝隙——若重试请求的幂等预查发生在原请求 commit 之前，
+        #  走到此处活动检查时会误判为"当前会话已有活动任务"(409)，而非幂等复用。
+        #  建议：拿到行锁后重查一次 client_request_id，让重试复用优先于活动检查。
+        # 4. 检测当前会话是否已存在活动任务
         active = await self.get_active_run(user_id, thread_id)
         if active is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="当前会话已有活动任务")
-
+        
+        # 5. 序号分配：sequence 是会话内消息的显示顺序
         max_sequence = (
             await self.db.execute(select(func.max(AgentMessage.sequence)).where(AgentMessage.thread_id == thread_id))
         ).scalar_one_or_none()
         user_sequence = 0 if max_sequence is None else max_sequence + 1
+ 
+        # 6. 在应用代码中预生成 UUID（而非依赖数据库生成），因为三个对象互相引用，需在 flush 前于内存中组成完整对象图
         run_id = uuid.uuid4()
         user_message_id = uuid.uuid4()
         assistant_message_id = uuid.uuid4()
@@ -166,14 +176,18 @@ class AgentService:
             model_config_id=model_config.id,
             model_name=model_config.model,
         )
-        # Run 和两条消息在同一事务中创建，避免接口返回后出现不完整记录。
+        # 7. Run 和两条消息在同一事务中创建，避免接口返回后出现不完整记录。
         self.db.add_all([run, user_message, assistant_message])
+        # 8. 同步更新会话信息（当前模型配置、能力、消息数、最近活跃时间）
         thread.model_config_id = model_config.id
         thread.capability = request.capability
         thread.message_count = (thread.message_count or 0) + 2
         thread.last_message_at = now
+        # 9. 如果会话标题仍是默认占位 "New conversation"（即尚未命名的新会话），用首条用户消息生成标题
         if thread.title == "New conversation":
             thread.title = self._initial_title(request.message)
+        
+        # 10. 防止同用户、同 client_request_id、但落在不同 thread 的并发提交问题
         try:
             await self.db.flush()
         except IntegrityError as exc:
@@ -186,12 +200,15 @@ class AgentService:
 
     async def submit_run(self, user_id: int, request: AgentRunSubmit) -> AgentRunResponse:
         """按需创建会话，并以幂等方式提交一个后台任务。"""
+        # 1. 从 agent_runs 表中查询是否已存在相同 client_request_id 的任务
         existing = await self._get_by_client_request(user_id, request.client_request_id)
         if existing is not None:
+            # 如果存在相同 client_request_id 的任务，且指定的会话 ID 与该任务所属的会话 ID 不同，则抛出冲突异常（会话归属校验）
             if request.thread_id is not None and existing.thread_id != request.thread_id:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="client_request_id 已被其他会话使用")
             return self.to_run_response(existing)
 
+        # 2. 按需创建会话（未传 thread_id 时自动创建）
         thread_id = request.thread_id
         if thread_id is None:
             thread = await self.create_thread(
@@ -203,6 +220,7 @@ class AgentService:
             )
             thread_id = thread.thread_id
 
+        # 3. 创建对话任务
         run_request = AgentRunCreate(
             message=request.message,
             model_config_id=request.model_config_id,
