@@ -25,10 +25,11 @@ interface UseSSEReturn {
 }
 
 export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
+  // 解构获取用户传入的回调函数
   const { onMessage, onDone, onError } = options;
   const abortControllerRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
-
+  // 中止当前请求
   const abort = useCallback(() => {
     abortControllerRef.current?.abort();
     setLoading(false);
@@ -37,26 +38,15 @@ export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
   const connect = useCallback(
     async (url: string, body?: unknown, options?: SSEConnectOptions) => {
       // 先中止上一次请求
-      abortControllerRef.current?.abort();
+      abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
       setLoading(true);
 
       try {
-        let token: string | null = null;
-        try {
-          const authStorage = localStorage.getItem("auth-storage");
-          if (authStorage) {
-            const parsed = JSON.parse(authStorage);
-            token = parsed.state?.access_token || null;
-          }
-        } catch {
-          token = null;
-        }
-
         const method = options?.method ?? "POST";
+        // 构建请求头，包括用户自定义的头和 Last-Event-ID
         const headers: Record<string, string> = {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           Accept: "text/event-stream",
           ...(options?.headers ?? {}),
           ...(options?.lastEventId
@@ -68,6 +58,7 @@ export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
           headers,
           signal: controller.signal,
         };
+        // 如果是 POST 请求，需要设置 Content-Type 并将 body 转换为 JSON 字符串
         if (method !== "GET") {
           headers["Content-Type"] = "application/json";
           init.body = JSON.stringify(body ?? {});
@@ -85,7 +76,7 @@ export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
 
         const decoder = new TextDecoder();
         let buffer = "";
-
+        // 处理每个事件块，提取事件名、事件ID和数据
         const processEventBlock = (block: string) => {
           const lines = block.split(/\r?\n/);
           let eventName = "message";
@@ -125,7 +116,7 @@ export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
 
           return false;
         };
-
+        // 读取响应体，直到完成或中止请求
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -153,14 +144,14 @@ export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
         setLoading(false);
       }
     },
-    [onMessage, onDone, onError],
+    [abort, onMessage, onDone, onError],
   );
 
   useEffect(() => {
     return () => {
-      abortControllerRef.current?.abort();
+      abort();
     };
-  }, []);
+  }, [abort]);
 
   return { loading, connect, abort };
 };
