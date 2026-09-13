@@ -40,9 +40,9 @@ const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
 
 const pageTitleMap: Record<string, string> = {
-  "/": "自选股",
+  "/": "AI 对话",
+  "/watchlist": "自选股",
   "/market": "行情中心",
-  "/agent": "AI智能助手",
   "/news": "新闻资讯",
   "/news/news": "新闻",
   "/news/flash": "快讯",
@@ -56,15 +56,7 @@ const pageTitleMap: Record<string, string> = {
 };
 
 const menuItems: MenuProps["items"] = [
-  { key: "/", icon: <DashboardOutlined />, label: "自选股" },
-  { key: "/market", icon: <StockOutlined />, label: "行情中心" },
-  { key: "/agent", icon: <RobotOutlined />, label: "AI 对话" },
-  {
-    key: "/news",
-    icon: <NotificationOutlined />,
-    label: "新闻资讯",
-    children: [{ key: "/news/flash", label: "快讯" }],
-  },
+  { key: "/", icon: <RobotOutlined />, label: "AI 对话" },
   {
     key: "/fund",
     icon: <FundOutlined />,
@@ -74,6 +66,14 @@ const menuItems: MenuProps["items"] = [
       { key: "/fund/market", label: "基金排行" },
     ],
   },
+  {
+    key: "/news",
+    icon: <NotificationOutlined />,
+    label: "新闻资讯",
+    children: [{ key: "/news/flash", label: "快讯" }],
+  },
+  { key: "/watchlist", icon: <DashboardOutlined />, label: "自选股" },
+  { key: "/market", icon: <StockOutlined />, label: "行情中心" },
   { key: "/cron-tasks", icon: <ClockCircleOutlined />, label: "定时任务" },
   {
     key: "/settings",
@@ -121,8 +121,8 @@ const AppLayout: React.FC = () => {
   const location = useLocation();
   const { isAuthenticated, logout } = useAuthStore();
   const handleLogout = async () => {
-    logout();//前端退出登录
-    await logoutApi();//后端退出登录
+    logout(); //前端退出登录
+    await logoutApi(); //后端退出登录
     navigate("/login");
   };
   const currentTitle =
