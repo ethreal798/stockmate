@@ -31,9 +31,13 @@ const AppRouter: React.FC = () => {
     <Suspense fallback={<LoadingFallback />}>
       <AuthGuard>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          {/* 首页为 AI 对话页 */}
+          <Route path="/" element={<Agent />} />
+          {/* 兼容旧链接：/agent 重定向到首页 */}
+          <Route path="/agent" element={<Navigate to="/" replace />} />
+          {/* 自选股移至 /watchlist */}
+          <Route path="/watchlist" element={<Dashboard />} />
           <Route path="/market" element={<Market />} />
-          <Route path="/agent" element={<Agent />} />
           <Route path="/news" element={<Navigate to="/news/news" replace />} />
           <Route path="/news/news" element={<News />} />
           <Route path="/news/flash" element={<News />} />
