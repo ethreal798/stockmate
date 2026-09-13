@@ -21,7 +21,8 @@ from .rag import (
     RagDocument,
     RagChunk,
     RagChunkEmbedding,
-    RagEntity,
+    RagEvent,
+    RagWeeklyReport,
     RagQueryLog,
 )
 from .news import NewsSource, NewsRawItem, NewsItem, NewsItemTopic, NewsItemEntity, NewsItemRelation
@@ -88,7 +89,8 @@ __all__ = [
     "RagDocument",
     "RagChunk",
     "RagChunkEmbedding",
-    "RagEntity",
+    "RagEvent",
+    "RagWeeklyReport",
     "RagQueryLog",
     # market
     "NewsSource",
