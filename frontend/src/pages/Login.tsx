@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { Form, Input, Button, Col, Typography, message, Divider } from "antd";
+import {
+  Form,
+  Input,
+  Button,
+  Col,
+  Typography,
+  message,
+  Divider,
+  Alert,
+} from "antd";
 import { UserOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
@@ -170,6 +179,15 @@ const Login: React.FC = () => {
             >
               <Input.Password prefix={<LockOutlined />} placeholder="******" />
             </Form.Item>
+
+            {!isRegister && (
+              <Alert
+                message="先使用默认账号快速体验吧！"
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+            )}
 
             <Form.Item style={{ marginTop: "24px" }}>
               <Button
