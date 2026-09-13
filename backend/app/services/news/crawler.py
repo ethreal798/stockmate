@@ -130,11 +130,22 @@ class NewsCrawler:
         # 2. 获取对应源的解析方法
         parser = PARSERS[source_code]
         inserted_count = 0
+        skip_empty = 0
+        skip_short = 0
 
         # 3. 遍历源的每一条raw数据解析成可以入库的数据
         for payload in items:
             try:
                 parsed_data = parser(payload)
+                # ---- R1 / R2 硬剔除（爬取层拦截，news_items / news_raw_items 双表不落库）----
+                skip_reason = self._check_hard_exclusion(parsed_data.content)
+                if skip_reason == "R1_EMPTY":
+                    skip_empty += 1
+                    continue
+                if skip_reason == "R2_SHORT":
+                    skip_short += 1
+                    continue
+                # ---- 硬剔除结束 ----
                 inserted = await self._insert_parsed_item(source, payload, parsed_data)
                 inserted_count += int(inserted)
             except Exception:
@@ -156,7 +167,31 @@ class NewsCrawler:
         else:
             # 结束查询开启的只读事务，避免调度器后续阶段持有无用事务。
             await self.db.rollback()
+        if skip_empty or skip_short:
+            logger.info(
+                "News hard-excluded: source=%s R1_empty=%d R2_short=%d",
+                source_code, skip_empty, skip_short,
+            )
         return inserted_count
+
+    @staticmethod
+    def _check_hard_exclusion(content: str | None) -> str | None:
+        """R1 / R2 硬剔除判定（爬取层第一道防线）。
+
+        返回值：
+          - None       : 通过，正常入库
+          - "R1_EMPTY" : R1 空正文（VIP 付费引流等，parser 层可能漏拦，此处兜底）
+          - "R2_SHORT" : R2 正文 <15 字（底线防护，实际拦截量趋近于零）
+        """
+        if content is None:
+            return "R1_EMPTY"
+        stripped = content.strip()
+        if not stripped:
+            return "R1_EMPTY"
+        # 15 字 ≈ 2-3 个完整词/短语，低于此阈值的快讯大概率是截断碎片
+        if len(stripped) < 15:
+            return "R2_SHORT"
+        return None
 
     async def _get_or_create_source(self, source_code: str) -> NewsSource:
         """如果当前配置抓取源在来源表中不存在则创建记录"""
