@@ -43,13 +43,13 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     async with async_session_factory() as session:
         try:
-            yield session
-            await session.commit()
+            yield session  # ① 把 session 交给路由/Service 使用
+            await session.commit()  # ② yield 返回后执行 commit（正常结束）
         except Exception:
-            await session.rollback()
+            await session.rollback()  # ③ 路由抛异常则回滚
             raise
         finally:
-            await session.close()
+            await session.close()  # ④ 无论如何关闭 session
 
 
 async def init_db() -> None:

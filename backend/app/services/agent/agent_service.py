@@ -355,22 +355,31 @@ class AgentService:
 
 
 async def claim_next_run(db: AsyncSession, worker_id: str) -> AgentRun | None:
-    """使用 SKIP LOCKED 原子领取最早的 pending Run。"""
+    """使用 SKIP LOCKED 原子领取最早的 pending Run。
+        SELECT * FROM agent_runs
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED;
+    """
+    # 1. 从数据库查询最早的 pending Run 任务    
     stmt = (
         select(AgentRun)
         .where(AgentRun.status == "pending")
         .order_by(AgentRun.created_at.asc())
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=True) # 2. 仅查询未被其他事务锁定的任务 并锁定该任务
         .limit(1)
     )
     run = (await db.execute(stmt)).scalar_one_or_none()
     if run is None:
         return None
+    # 3. 更新 Run 状态为 running 并设置任务开始时间 started_at 设置租约过期时间 lease_expires_at 增加尝试次数 attempt_count
     now = datetime.now()
     run.status = "running"
-    run.worker_id = worker_id
-    run.started_at = run.started_at or now
-    run.lease_expires_at = now + timedelta(seconds=settings.AGENT_RUN_LEASE_SECONDS)
-    run.attempt_count = (run.attempt_count or 0) + 1
+    run.worker_id = worker_id  # 记录归属（hostname:pid），便于排查
+    run.started_at = run.started_at or now  # 首次领取时间（重试时保留原值）
+    run.lease_expires_at = now + timedelta(seconds=settings.AGENT_RUN_LEASE_SECONDS)  # 建立租约
+    run.attempt_count = (run.attempt_count or 0) + 1  # 尝试次数+1
+    # 6. 刷新数据库后，返回 Run 任务
     await db.flush()
     return run

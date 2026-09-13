@@ -15,15 +15,15 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
+        case_sensitive=False,  # 环境变量大小写不敏感
+        extra="ignore",  # 忽略 .env 中多余的变量
     )
 
     # ---- 应用基本配置 ----
-    DEBUG: bool = False
+    DEBUG: bool = True
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    APP_NAME: str = "python-stock"
+    APP_NAME: str = "stockmate"
     APP_VERSION: str = "0.1.0"
     API_PREFIX: str = "/api/v1"
 
@@ -68,8 +68,16 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
     REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
 
+    # ---- CORS 配置 ----
+    # 从环境变量读取，按照格式编排：http://localhost:5173,http://localhost:3000
+    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+
+    @property
+    def CORS_ORIGINS(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS_STR.split(",") if origin.strip()]
+
     # ---- 数据库配置 ----
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/go_stock"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/stockmate"
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_ECHO: bool = False
@@ -145,14 +153,6 @@ class Settings(BaseSettings):
     AGENT_EVENT_STREAM_MAXLEN: int = 10000  # 每个Run最多保留的Redis事件数
     AGENT_STREAM_BLOCK_MS: int = 10000  # SSE读取Redis时的阻塞等待时间
     AGENT_SNAPSHOT_INTERVAL_SECONDS: float = 0.5  # 部分回答写入PostgreSQL的间隔
-
-    # ---- CORS 配置 ----
-    # 从环境变量读取，格式：http://localhost:5173,http://localhost:3000
-    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
-
-    @property
-    def CORS_ORIGINS(self) -> list[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS_STR.split(",") if origin.strip()]
 
     # ---- 定时任务配置 ----
     SCHEDULER_TIMEZONE: str = "Asia/Shanghai"

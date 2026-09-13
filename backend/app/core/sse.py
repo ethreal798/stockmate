@@ -20,7 +20,7 @@ class SseManager:
         self._lock = asyncio.Lock()
 
     async def subscribe(self) -> AsyncGenerator[str, None]:
-        """订阅 SSE 信号。"""
+        """前端调用该方法订阅 SSE 信号。"""
         queue = asyncio.Queue()
         async with self._lock:
             self._clients.add(queue)
@@ -32,8 +32,10 @@ class SseManager:
                 message = await queue.get()
                 yield f"data: {message}\n\n"
         except asyncio.CancelledError:
+            # 如果在等消息期间，连接被取消了（比如前端关了页面、网络断了），就会抛出这个异常。
             logger.info("SSE client connection cancelled")
         finally:
+            # 能走到这里说明发生异常了，所以必须从集合中移除异常队列
             async with self._lock:
                 if queue in self._clients:
                     self._clients.remove(queue)
