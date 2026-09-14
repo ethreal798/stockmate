@@ -84,7 +84,7 @@ async def ingest_news(
     stats = await service.ingest_telegraphs(
         limit=request.limit,
         news_type=request.news_type,
-        relevant_only=request.relevant_only,
+        source_code=request.source_code,
     )
     return RagNewsIngestResponse(success=True, **stats)
 
@@ -105,8 +105,6 @@ async def chunk_documents(
 ) -> RagChunkBatchResponse:
     stats = await service.chunk_pending_documents(
         limit=request.limit,
-        max_chars=request.max_chars,
-        overlap_chars=request.overlap_chars,
     )
     return RagChunkBatchResponse(success=True, **stats)
 
@@ -141,8 +139,6 @@ async def run_news_pipeline_drain(
         news_type=request.news_type,
         relevant_only=request.relevant_only,
         chunk_limit=request.chunk_limit,
-        max_chars=request.max_chars,
-        overlap_chars=request.overlap_chars,
         embed_limit=request.embed_limit,
         embedding_model=request.embedding_model,
     )
