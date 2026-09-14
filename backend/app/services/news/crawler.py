@@ -137,14 +137,15 @@ class NewsCrawler:
         for payload in items:
             try:
                 parsed_data = parser(payload)
-                # ---- R1 / R2 硬剔除（爬取层拦截，news_items / news_raw_items 双表不落库）----
-                skip_reason = self._check_hard_exclusion(parsed_data.content)
-                if skip_reason == "R1_EMPTY":
-                    skip_empty += 1
-                    continue
-                if skip_reason == "R2_SHORT":
-                    skip_short += 1
-                    continue
+                # ---- R1 / R2 硬剔除（爬取层拦截，news_items / news_raw_items 双表不落库） 目前该规则作用于财联社----
+                if source_code == "cls":
+                    skip_reason = self._check_hard_exclusion(parsed_data.content)
+                    if skip_reason == "R1_EMPTY":
+                        skip_empty += 1
+                        continue
+                    if skip_reason == "R2_SHORT":
+                        skip_short += 1
+                        continue
                 # ---- 硬剔除结束 ----
                 inserted = await self._insert_parsed_item(source, payload, parsed_data)
                 inserted_count += int(inserted)
