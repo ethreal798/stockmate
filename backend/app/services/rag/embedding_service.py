@@ -86,8 +86,14 @@ class EmbeddingService:
             await self.db.commit()
 
         # 批量更新已完成向量化的 document 的 processing_stage
+        # 注意：只更新所有 flash-v1 chunk 都已向量化的 document，
+        # 避免 batch 间部分 chunk 成功、部分失败时误标记
         if embedded_document_ids:
-            await self._update_document_stage(embedded_document_ids, "embedded")
+            fully_embedded_ids = await self._filter_fully_embedded_documents(
+                embedded_document_ids, embedding_model
+            )
+            if fully_embedded_ids:
+                await self._update_document_stage(fully_embedded_ids, "embedded")
 
         return stats
 
@@ -178,6 +184,37 @@ class EmbeddingService:
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def _filter_fully_embedded_documents(
+        self,
+        document_ids: set[int],
+        model: str,
+    ) -> set[int]:
+        """只保留所有 flash-v1 chunk 都已用指定模型向量化的 document_id。"""
+        if not document_ids:
+            return set()
+
+        join_cond = and_(
+            RagChunkEmbedding.chunk_id == RagChunk.id,
+            RagChunkEmbedding.embedding_model == model,
+        )
+        # EXISTS 子查询：document 下是否还有 flash-v1 chunk 没有该模型的 embedding
+        unembedded_exists = (
+            select(RagChunk.id)
+            .outerjoin(RagChunkEmbedding, join_cond)
+            .where(RagChunk.document_id == RagDocument.id)
+            .where(RagChunk.chunking_version == "flash-v1")
+            .where(RagChunkEmbedding.id.is_(None))
+            .correlate(RagDocument)
+            .exists()
+        )
+        stmt = (
+            select(RagDocument.id)
+            .where(RagDocument.id.in_(list(document_ids)))
+            .where(~unembedded_exists)
+        )
+        result = await self.db.execute(stmt)
+        return set(result.scalars().all())
 
     async def _update_document_stage(self, document_ids: set[int], stage: str) -> None:
         """批量更新已完成向量化的 document 的 processing_stage。"""
