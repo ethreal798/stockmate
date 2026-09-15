@@ -104,9 +104,9 @@ class Settings(BaseSettings):
     AI_EMBEDDING_DIM: int = 1024
     AI_EMBEDDING_BATCH_SIZE: int = 10
     AI_EMBEDDING_REQUEST_DIMENSIONS: int = 1024
-    AI_EMBEDDING_TIMEOUT_SECONDS: int = 60
+    AI_EMBEDDING_TIMEOUT_SECONDS: int = 60  # 访问服务商embedding模型的超时时间
     AI_EMBEDDING_MAX_RETRIES: int = 3
-    AI_EMBEDDING_RETRY_BASE_SECONDS: float = 2.0
+    AI_EMBEDDING_RETRY_BASE_SECONDS: float = 2.0  # 重试时需要等待的时间 指数退避
 
     # ---- RAG 流水线配置 ----
     RAG_PIPELINE_SWITCH: bool = False

@@ -37,6 +37,7 @@ class NewsIngestService:
             self.db.add(self._build_document(item))
             stats["ingested"] += 1
 
+        # 4. 完成一批后 直接提交事务。放在其他阶段错误 导致整体一起回滚
         if stats["ingested"]:
             await self.db.commit()
         return stats
