@@ -1,6 +1,10 @@
 """财联社快讯解析器。"""
 
+import re
 from typing import Any
+
+# 财联社 content 格式为 【标题】正文，需要剥离标题前缀（title 字段已单独提供）
+TITLE_PREFIX_RE = re.compile(r"^【([^】]+)】\s*(.*)$", re.S)
 
 from .dto import ParsedEntity, ParsedNewsItem, ParsedRelation, ParsedTopic
 from .normalization import (
@@ -16,7 +20,17 @@ def parse_cls_item(item: dict[str, Any]) -> ParsedNewsItem:
     if not source_item_id:
         raise ValueError("财联社快讯缺少 id")
 
-    content = clean_text(item.get("content") or item.get("brief"))
+    raw_content = clean_text(item.get("content") or item.get("brief"))
+
+    title = optional_str(item.get("title"))
+    content = raw_content
+    # 如果 content 包含【标题】前缀，剥离掉；若 title 缺失则用提取的标题兜底
+    title_match = TITLE_PREFIX_RE.match(raw_content)
+    if title_match:
+        extracted_title = title_match.group(1).strip() or None
+        content = title_match.group(2).strip() or raw_content
+        if not title and extracted_title:
+            title = extracted_title
 
     level = (optional_str(item.get("level")) or "").upper() or None
 
@@ -56,7 +70,7 @@ def parse_cls_item(item: dict[str, Any]) -> ParsedNewsItem:
         source_item_id=source_item_id,
         published_at=epoch_seconds(item.get("ctime")),
         content=content,
-        title=optional_str(item.get("title")),
+        title=title,
         is_source_important=level in {"A", "B"},
         topics=topics,
         entities=entities,
