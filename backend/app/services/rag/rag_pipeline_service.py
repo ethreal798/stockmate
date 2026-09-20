@@ -19,64 +19,6 @@ class RagPipelineService:
         self.chunk_service = ChunkService(db)
         self.embedding_service = EmbeddingService(db)
 
-    # 实际执行 入库 -> 切片 -> 向量化操作
-    async def run_news_pipeline(
-        self,
-        *,
-        news_limit: int = 100,
-        news_type: str = "all",
-        relevant_only: bool = True,
-        chunk_limit: int = 100,
-        max_chars: int = 800,
-        overlap_chars: int = 120,
-        embed_limit: int = 100,
-        embedding_model: str | None = None,
-    ) -> dict[str, Any]:
-        # 组装返回结果
-        result: dict[str, Any] = {
-            "success": False,
-            "failed_stage": None,
-            "error": None,
-            "ingest": None,
-            "chunk": None,
-            "embed": None,
-        }
-
-        # 1. 同步资讯进RAG文档表
-        try:
-            result["ingest"] = await self.news_ingest_service.ingest_telegraphs(
-                limit=news_limit,
-                news_type=news_type,
-                relevant_only=relevant_only,
-            )
-        except Exception as exc:
-            await self.db.rollback()
-            return self._mark_failed(result, "ingest", exc)
-
-        # 2. 对RAG文档表的文档进行文档切分
-        try:
-            result["chunk"] = await self.chunk_service.chunk_pending_documents(
-                limit=chunk_limit,
-                max_chars=max_chars,
-                overlap_chars=overlap_chars,
-            )
-        except Exception as exc:
-            await self.db.rollback()
-            return self._mark_failed(result, "chunk", exc)
-
-        # 3. 对切分好的chunk进行向量化
-        try:
-            result["embed"] = await self.embedding_service.embed_pending_chunks(
-                limit=embed_limit,
-                model=embedding_model,
-            )
-        except Exception as exc:
-            await self.db.rollback()
-            return self._mark_failed(result, "embed", exc)
-
-        result["success"] = True
-        return result
-
     # 流水线入口
     async def run_news_pipeline_drain(
         self,
@@ -87,8 +29,6 @@ class RagPipelineService:
         news_type: str = "all",
         relevant_only: bool = True,
         chunk_limit: int = 100,
-        max_chars: int = 800,
-        overlap_chars: int = 120,
         embed_limit: int = 100,
         embedding_model: str | None = None,
     ) -> dict[str, Any]:
@@ -108,10 +48,7 @@ class RagPipelineService:
             batch_result = await self.run_news_pipeline(
                 news_limit=news_limit,
                 news_type=news_type,
-                relevant_only=relevant_only,
                 chunk_limit=chunk_limit,
-                max_chars=max_chars,
-                overlap_chars=overlap_chars,
                 embed_limit=embed_limit,
                 embedding_model=embedding_model,
             )
@@ -147,6 +84,58 @@ class RagPipelineService:
             "batches": batches,
         }
 
+    # 实际执行 入库 -> 切片 -> 向量化操作
+    async def run_news_pipeline(
+        self,
+        *,
+        news_limit: int = 100,
+        news_type: str = "all",
+        chunk_limit: int = 100,
+        embed_limit: int = 100,
+        embedding_model: str | None = None,
+    ) -> dict[str, Any]:
+        # 组装返回结果
+        result: dict[str, Any] = {
+            "success": False,
+            "failed_stage": None,
+            "error": None,
+            "ingest": None,
+            "chunk": None,
+            "embed": None,
+        }
+
+        # 1. 同步资讯进RAG文档表
+        try:
+            result["ingest"] = await self.news_ingest_service.ingest_telegraphs(
+                limit=news_limit,
+                news_type=news_type,
+            )
+        except Exception as exc:
+            await self.db.rollback()
+            return self._mark_failed(result, "ingest", exc)
+
+        # 2. 对RAG文档表的文档进行文档切分
+        try:
+            result["chunk"] = await self.chunk_service.chunk_pending_documents(
+                limit=chunk_limit,
+            )
+        except Exception as exc:
+            await self.db.rollback()
+            return self._mark_failed(result, "chunk", exc)
+
+        # 3. 对切分好的chunk进行向量化
+        try:
+            result["embed"] = await self.embedding_service.embed_pending_chunks(
+                limit=embed_limit,
+                model=embedding_model,
+            )
+        except Exception as exc:
+            await self.db.rollback()
+            return self._mark_failed(result, "embed", exc)
+
+        result["success"] = True
+        return result
+
     @staticmethod
     def _mark_failed(result: dict[str, Any], stage: str, exc: Exception) -> dict[str, Any]:
         result["failed_stage"] = stage
@@ -155,6 +144,7 @@ class RagPipelineService:
 
     @staticmethod
     def _has_progress(result: dict[str, Any]) -> bool:
+        """ 判断本次作业结果是否成功 """
         ingest = result.get("ingest") or {}
         chunk = result.get("chunk") or {}
         embed = result.get("embed") or {}
@@ -170,6 +160,7 @@ class RagPipelineService:
 
     @staticmethod
     def _accumulate_totals(totals: dict[str, int], result: dict[str, Any]) -> None:
+        """ 计算三阶段的执行结果 """
         for stage in ("ingest", "chunk", "embed"):
             stats = result.get(stage) or {}
             for key, value in stats.items():

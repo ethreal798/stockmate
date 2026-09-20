@@ -27,28 +27,28 @@ class RagService:
         top_k: int = 8,
         days: int | None = 7,
         model: str | None = None,
-        embedding_model: str | None = None,
-        use_vector: bool = True,
     ) -> dict[str, Any]:
         """执行 RAG 问答。"""
+        # 1. 准备初始必须变量
         start_time = time.perf_counter()
         conversation_id = conversation_id or str(uuid.uuid4())
-        model_name = model or settings.AI_MODEL_NAME
+        model_name = model  # or settings.AI_MODEL_NAME
 
+        # 2. 执行检索流程
         retrieval = await self.retrieval_service.retrieve(
             query=message,
             top_k=top_k,
             days=days,
-            model=embedding_model,
-            use_vector=use_vector,
         )
         retrieved_items = retrieval["items"]
+        # 3. 提取检索结果引用 去掉正文
         citations = self._build_citations(retrieved_items)
 
         if not retrieved_items:
             answer = "暂未检索到可用于回答的新闻资料。你可以扩大时间范围，或先执行新闻入库、切块和向量化任务。"
             usage = None
         else:
+            # 4. 组装提示词 调用大模型生成回复
             messages = self._build_messages(message, retrieved_items)
             llm_result = await self.llm_service.generate(messages=messages, model=model_name, temperature=0.2)
             answer = llm_result["content"]
@@ -78,6 +78,7 @@ class RagService:
         }
 
     def _build_messages(self, question: str, items: list[dict[str, Any]]) -> list[dict[str, str]]:
+        """ 组装检索结果与提示词 提问大模型 """
         context = self._build_context(items)
         system_prompt = (
             "你是一个中文金融资讯 RAG 助手。请只基于用户提供的检索资料回答，不要编造未出现的事实。"
@@ -100,7 +101,8 @@ class RagService:
             {"role": "user", "content": user_prompt},
         ]
 
-    def _build_context(self, items: list[dict[str, Any]]) -> str:
+    @staticmethod
+    def _build_context(items: list[dict[str, Any]]) -> str:
         lines: list[str] = []
         for index, item in enumerate(items, start=1):
             published_at = item["published_at"].isoformat(sep=" ") if item.get("published_at") else "未知时间"
@@ -112,7 +114,9 @@ class RagService:
             )
         return "\n".join(lines)
 
-    def _build_citations(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    @staticmethod
+    def _build_citations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """ 从完整检索结果里剥掉 chunk 正文，只留来源/链接/分数等元信息 ——给前端展示引用来源 + 给后端审计留快照。 """
         citations: list[dict[str, Any]] = []
         for index, item in enumerate(items, start=1):
             published_at = item.get("published_at")
