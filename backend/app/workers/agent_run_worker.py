@@ -47,8 +47,9 @@ class AgentRunWorker:
         async with AsyncPostgresSaver.from_conn_string(checkpoint_url) as checkpointer:
             # 1. 在数据库里建 checkpoint 相关的表（checkpoints、checkpoint_writes、checkpoint_blobs 等，幂等，已存在则跳过）
             await checkpointer.setup()
-            logger.info("Agent worker started: worker_id=%s", self.worker_id)
+            logger.info("Agent worker started: worker_id=%s, checkpoint_url=%s", self.worker_id, checkpoint_url)
             last_reap_at = time.monotonic()
+            idle_ticks = 0  # 用于限流"队列空"日志
             while not self._stopping:
                 # 2. 检查是否需要中断过期任务
                 if time.monotonic() - last_reap_at >= min(settings.AGENT_RUN_LEASE_SECONDS / 2, 30):
@@ -58,9 +59,14 @@ class AgentRunWorker:
                 run_id = await self._claim()
                 # 4. 如果没有任务，等待 0.5 秒后重试
                 if run_id is None:
+                    idle_ticks += 1
+                    if idle_ticks % 20 == 0:  # 每 20 个 tick（默认 10 秒）打一条心跳
+                        logger.debug("Agent worker idle: no pending runs (tick=%d)", idle_ticks)
                     await asyncio.sleep(settings.AGENT_RUN_POLL_SECONDS)
                     continue
                 # 5. 执行任务
+                idle_ticks = 0
+                logger.info("Claimed run: run_id=%s", run_id)
                 await self._execute(run_id, checkpointer)
 
     async def _claim(self) -> UUID | None:
@@ -110,16 +116,24 @@ class AgentRunWorker:
                 "configurable": {
                     "thread_id": str(run.thread_id),
                     "run_id": str(run.id),
-                    "user_id": str(run.user_id),
-                    "model_config_id": run.model_config_id,
                 }
             }
             # 4. redis_stream流中发布启动事件
             await events.publish(run_id, "metadata", {"run_id": str(run_id), "status": "running"})
 
             # 5. LangGraph 负责模型调用和 Checkpoint，Worker 负责业务快照与实时事件。
+            logger.info(
+                "Executing graph: run_id=%s thread_id=%s user_id=%s model=%s msg_len=%d",
+                run_id, run.thread_id, run.user_id, model_config.model, len(user_message.content),
+            )
             async for chunk, _metadata in graph.astream(
-                {"messages": [HumanMessage(content=user_message.content)]},
+                {
+                    "messages": [HumanMessage(content=user_message.content)],
+                    "user_id": run.user_id,
+                    "thread_id": str(run.thread_id),
+                    "model_config_id": run.model_config_id,
+                    "capability": run.capability,
+                 },
                 config=config,
                 stream_mode="messages",
             ):
@@ -145,6 +159,7 @@ class AgentRunWorker:
                     canceled = await self._save_progress(run_id, "".join(content_parts), last_event_id)
                     last_snapshot_at = now
                     if canceled:
+                        logger.info("Run canceled via snapshot check: run_id=%s", run_id)
                         await self._finish_canceled(run_id, "".join(content_parts), last_event_id)
                         terminal_id = await events.publish(
                             run_id, "aborted", {"run_id": str(run_id), "status": "canceled"}
@@ -161,6 +176,11 @@ class AgentRunWorker:
                 usage=usage,
                 model_name=model_name or model_config.model,
                 finish_reason=finish_reason or "stop",
+            )
+            logger.info(
+                "Run finished: run_id=%s status=%s finish_reason=%s model=%s usage=%s",
+                run_id, final_status, finish_reason or "stop",
+                model_name or model_config.model, usage,
             )
             # 发布最终事件
             terminal_event = "aborted" if final_status == "canceled" else "done"
