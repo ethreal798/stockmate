@@ -163,8 +163,6 @@ async def retrieve_chunks(
         query=request.query,
         top_k=request.top_k,
         days=request.days,
-        model=request.model,
-        use_vector=request.use_vector,
     )
     return RagRetrieveResponse.model_validate(result)
 
@@ -180,7 +178,5 @@ async def chat(
         top_k=request.top_k,
         days=request.days,
         model=request.model,
-        embedding_model=request.embedding_model,
-        use_vector=request.use_vector,
     )
     return RagChatResponse.model_validate(result)

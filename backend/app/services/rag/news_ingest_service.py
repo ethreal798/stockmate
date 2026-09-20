@@ -56,6 +56,7 @@ class NewsIngestService:
             selectinload(NewsItem.entities),
             selectinload(NewsItem.relations),
         )
+        # 关联来源表
         stmt = stmt.join(NewsSource)
 
         # 2. 资讯题材过滤
@@ -65,7 +66,7 @@ class NewsIngestService:
 
         # 3. 来源过滤
         if source_code != "all":
-            stmt = stmt.where(NewsItem.source.code == source_code)
+            stmt = stmt.where(NewsSource.code == source_code)
 
         # 4. 过滤已加载 根据文档表已有的来源id进行过滤 RagDocument.source_id == NewsItem.id
         existing_document = (

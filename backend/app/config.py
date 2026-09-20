@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     AI_EMBEDDING_RETRY_BASE_SECONDS: float = 2.0  # 重试时需要等待的时间 指数退避
 
     # ---- RAG 流水线配置 ----
-    RAG_PIPELINE_SWITCH: bool = False
+    RAG_PIPELINE_SWITCH: bool = True
     # 立刻执行RAG流水线当新增资讯新闻后
     RAG_PIPELINE_ON_NEWS_CRAWL: bool = True
     # RAG流水线最小间隔时间
@@ -126,10 +126,6 @@ class Settings(BaseSettings):
     RAG_PIPELINE_CHUNK_LIMIT: int = 100
     # 最大向量化数据量
     RAG_PIPELINE_EMBED_LIMIT: int = 100
-    # 最大字符数
-    RAG_PIPELINE_MAX_CHARS: int = 800
-    # 重叠字符数
-    RAG_PIPELINE_OVERLAP_CHARS: int = 120
 
     # ---- 备用 AI 模型配置（Ollama / DeepSeek 等） ----
     AI_OLLAMA_BASE_URL: str = "http://localhost:11434"

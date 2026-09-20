@@ -56,7 +56,7 @@ class RagNewsIngestRequest(BaseModel):
 
     limit: int = Field(100, ge=1, le=1000, description="本次最多处理多少条新闻")
     news_type: str = Field("all", description="新闻类型: all / fast / news")
-    relevant_only: bool = Field(True, description="是否仅处理金融相关资讯")
+    source_code: str = Field("all", description="来源类型：all / cls")
 
 
 class RagNewsIngestResponse(BaseModel):
@@ -69,11 +69,9 @@ class RagNewsIngestResponse(BaseModel):
 
 
 class RagChunkRequest(BaseModel):
-    """RAG 文档切块请求。"""
+    """RAG 文档切块请求（FlashV1 策略，无需额外参数）。"""
 
     limit: int = Field(100, ge=1, le=1000, description="本次最多处理多少篇文档")
-    max_chars: int = Field(800, ge=200, le=4000, description="每个 chunk 最大字符数")
-    overlap_chars: int = Field(120, ge=0, le=1000, description="相邻 chunk 重叠字符数")
 
 
 class RagChunkBatchResponse(BaseModel):
@@ -83,7 +81,6 @@ class RagChunkBatchResponse(BaseModel):
     scanned: int = 0
     chunked_documents: int = 0
     chunks_created: int = 0
-    skipped_existing: int = 0
     skipped_invalid: int = 0
 
 
@@ -91,7 +88,7 @@ class RagEmbedRequest(BaseModel):
     """RAG chunk 向量化请求。"""
 
     limit: int = Field(100, ge=1, le=1000, description="本次最多处理多少个 chunk")
-    model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
+    # model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
 
 
 class RagEmbedResponse(BaseModel):
@@ -107,14 +104,12 @@ class RagEmbedResponse(BaseModel):
 
 
 class RagNewsPipelineRequest(BaseModel):
-    """新闻 RAG 一键流水线请求。"""
+    """新闻 RAG 一键流水线请求（FlashV1 切片，无需额外参数）。"""
 
     news_limit: int = Field(100, ge=1, le=1000, description="本次最多同步多少条新闻")
     news_type: str = Field("all", description="新闻类型: all / fast / news")
     relevant_only: bool = Field(True, description="是否仅处理金融相关资讯")
     chunk_limit: int = Field(100, ge=1, le=1000, description="本次最多切分多少篇文档")
-    max_chars: int = Field(800, ge=200, le=4000, description="每个 chunk 最大字符数")
-    overlap_chars: int = Field(120, ge=0, le=1000, description="相邻 chunk 重叠字符数")
     embed_limit: int = Field(100, ge=1, le=1000, description="本次最多向量化多少个 chunk")
     embedding_model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
 
@@ -155,8 +150,8 @@ class RagRetrieveRequest(BaseModel):
     query: str = Field(..., min_length=1, description="用户查询")
     top_k: int = Field(8, ge=1, le=50, description="返回 chunk 数量")
     days: Optional[int] = Field(7, ge=1, le=365, description="检索最近多少天的数据")
-    model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
-    use_vector: bool = Field(True, description="是否启用向量召回")
+    # model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
+    # use_vector: bool = Field(True, description="是否启用向量召回")
 
 
 class RagRetrieveItem(BaseModel):
@@ -208,8 +203,6 @@ class RagChatRequest(BaseModel):
     top_k: int = Field(8, ge=1, le=50, description="用于回答的召回 chunk 数")
     days: Optional[int] = Field(7, ge=1, le=365, description="检索最近多少天的数据")
     model: Optional[str] = Field(None, description="回答模型名称")
-    embedding_model: Optional[str] = Field(None, description="Embedding 模型名称")
-    use_vector: bool = Field(True, description="是否启用向量召回")
 
 
 class RagChatResponse(BaseModel):
