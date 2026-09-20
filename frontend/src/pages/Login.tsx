@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { Form, Input, Button, Col, Typography, message, Divider } from "antd";
+import {
+  Form,
+  Input,
+  Button,
+  Col,
+  Typography,
+  message,
+  Divider,
+  Alert,
+} from "antd";
 import { UserOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
@@ -19,28 +28,26 @@ const Login: React.FC = () => {
     setLoading(true);
     try {
       if (isRegister) {
-        const res = await register({
+        await register({
           email: values.email,
           username: values.username,
           password: values.password,
         });
-        const { access_token, token_type } = res.data;
-        loginStore(access_token, token_type);
+        loginStore();
         message.success("注册并登录成功");
       } else {
         const formData = new FormData();
         formData.append("username", values.email);
         formData.append("password", values.password);
-
         const res = await login(formData);
-        const { access_token, token_type } = res.data;
-        loginStore(access_token, token_type);
+        console.log(res);
+        loginStore();
         message.success("登录成功");
       }
       navigate("/");
     } catch (error: any) {
       if (error.response?.status === 401) {
-        console.error(error.response.data.detail || "邮箱或密码错误");
+        console.error(error.response.data.msg || "邮箱或密码错误");
       } else {
         console.error(isRegister ? "注册失败" : "登录失败");
       }
@@ -136,6 +143,10 @@ const Login: React.FC = () => {
             form={form}
             name="auth_form"
             layout="vertical"
+            initialValues={{
+              email: "14750995319@163.com",
+              password: "123456",
+            }}
             onFinish={onFinish}
             autoComplete="off"
             size="large"
@@ -168,6 +179,15 @@ const Login: React.FC = () => {
             >
               <Input.Password prefix={<LockOutlined />} placeholder="******" />
             </Form.Item>
+
+            {!isRegister && (
+              <Alert
+                message="先使用默认账号快速体验吧！"
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+            )}
 
             <Form.Item style={{ marginTop: "24px" }}>
               <Button

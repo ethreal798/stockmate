@@ -29,6 +29,7 @@ import {
 import { useNavigate, useLocation, Routes, Route } from "react-router-dom";
 import AppRouter from "./router";
 import Login from "@/pages/Login";
+import { logoutApi } from "@/api/auth";
 import { useAuthStore } from "@/stores/authStore";
 import "dayjs/locale/zh-cn";
 import dayjs from "dayjs";
@@ -39,9 +40,9 @@ const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
 
 const pageTitleMap: Record<string, string> = {
-  "/": "自选股",
+  "/": "AI 对话",
+  "/watchlist": "自选股",
   "/market": "行情中心",
-  "/agent": "AI智能助手",
   "/news": "新闻资讯",
   "/news/news": "新闻",
   "/news/flash": "快讯",
@@ -55,15 +56,7 @@ const pageTitleMap: Record<string, string> = {
 };
 
 const menuItems: MenuProps["items"] = [
-  { key: "/", icon: <DashboardOutlined />, label: "自选股" },
-  { key: "/market", icon: <StockOutlined />, label: "行情中心" },
-  { key: "/agent", icon: <RobotOutlined />, label: "AI 对话" },
-  {
-    key: "/news",
-    icon: <NotificationOutlined />,
-    label: "新闻资讯",
-    children: [{ key: "/news/flash", label: "快讯" }],
-  },
+  { key: "/", icon: <RobotOutlined />, label: "AI 对话" },
   {
     key: "/fund",
     icon: <FundOutlined />,
@@ -73,6 +66,14 @@ const menuItems: MenuProps["items"] = [
       { key: "/fund/market", label: "基金排行" },
     ],
   },
+  {
+    key: "/news",
+    icon: <NotificationOutlined />,
+    label: "新闻资讯",
+    children: [{ key: "/news/flash", label: "快讯" }],
+  },
+  { key: "/watchlist", icon: <DashboardOutlined />, label: "自选股" },
+  { key: "/market", icon: <StockOutlined />, label: "行情中心" },
   { key: "/cron-tasks", icon: <ClockCircleOutlined />, label: "定时任务" },
   {
     key: "/settings",
@@ -118,8 +119,12 @@ const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { token_type, isAuthenticated, logout } = useAuthStore();
-
+  const { isAuthenticated, logout } = useAuthStore();
+  const handleLogout = async () => {
+    logout(); //前端退出登录
+    await logoutApi(); //后端退出登录
+    navigate("/login");
+  };
   const currentTitle =
     (location.pathname.startsWith("/fund/detail/")
       ? "基金详情"
@@ -132,10 +137,7 @@ const AppLayout: React.FC = () => {
       key: "logout",
       icon: <LogoutOutlined />,
       label: "退出登录",
-      onClick: () => {
-        logout();
-        navigate("/login");
-      },
+      onClick: () => handleLogout(),
     },
   ];
 
@@ -202,7 +204,7 @@ const AppLayout: React.FC = () => {
           </span>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {isAuthenticated && token_type ? (
+            {isAuthenticated ? (
               <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
                 <Space style={{ cursor: "pointer", padding: "0 8px" }}>
                   <Avatar
@@ -213,9 +215,9 @@ const AppLayout: React.FC = () => {
                   <Text
                     strong
                     style={{ maxWidth: 100 }}
-                    ellipsis={{ tooltip: token_type }}
+                    ellipsis={{ tooltip: "" }}
                   >
-                    {token_type}
+                    已登录
                   </Text>
                 </Space>
               </Dropdown>
