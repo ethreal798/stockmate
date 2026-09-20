@@ -6,7 +6,6 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.rag import RagQueryLog
 from app.services.llm_service import LLMService
 from app.services.rag.retrieval_service import RetrievalService
@@ -78,7 +77,7 @@ class RagService:
         }
 
     def _build_messages(self, question: str, items: list[dict[str, Any]]) -> list[dict[str, str]]:
-        """ 组装检索结果与提示词 提问大模型 """
+        """组装检索结果与提示词 提问大模型"""
         context = self._build_context(items)
         system_prompt = (
             "你是一个中文金融资讯 RAG 助手。请只基于用户提供的检索资料回答，不要编造未出现的事实。"
@@ -116,7 +115,7 @@ class RagService:
 
     @staticmethod
     def _build_citations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """ 从完整检索结果里剥掉 chunk 正文，只留来源/链接/分数等元信息 ——给前端展示引用来源 + 给后端审计留快照。 """
+        """从完整检索结果里剥掉 chunk 正文，只留来源/链接/分数等元信息 ——给前端展示引用来源 + 给后端审计留快照。"""
         citations: list[dict[str, Any]] = []
         for index, item in enumerate(items, start=1):
             published_at = item.get("published_at")

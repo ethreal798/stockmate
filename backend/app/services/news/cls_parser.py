@@ -3,9 +3,6 @@
 import re
 from typing import Any
 
-# 财联社 content 格式为 【标题】正文，需要剥离标题前缀（title 字段已单独提供）
-TITLE_PREFIX_RE = re.compile(r"^【([^】]+)】\s*(.*)$", re.S)
-
 from .dto import ParsedEntity, ParsedNewsItem, ParsedRelation, ParsedTopic
 from .normalization import (
     clean_text,
@@ -13,6 +10,9 @@ from .normalization import (
     normalize_stock_symbol,
     optional_str,
 )
+
+# 财联社 content 格式为 【标题】正文，需要剥离标题前缀（title 字段已单独提供）
+TITLE_PREFIX_RE = re.compile(r"^【([^】]+)】\s*(.*)$", re.S)
 
 
 def parse_cls_item(item: dict[str, Any]) -> ParsedNewsItem:

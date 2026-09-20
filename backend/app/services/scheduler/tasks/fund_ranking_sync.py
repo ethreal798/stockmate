@@ -23,4 +23,4 @@ async def fund_ranking_sync(db, params: dict[str, Any]) -> None:
     """
     service = FundRankingSyncService(db)
     await service.fetch_and_sync()
-    logger.info(f"基金排行定时同步完成")
+    logger.info("基金排行定时同步完成")

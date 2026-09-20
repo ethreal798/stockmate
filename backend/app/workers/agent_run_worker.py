@@ -79,11 +79,11 @@ class AgentRunWorker:
         """执行单个 Run，并同步写入 Redis 事件和 PostgreSQL 快照。"""
         redis = await get_redis()  # 取 Redis 连接（模块级单例，复用连接池）
         events = AgentEventStream(redis)  # 事件流发布器，封装"向某 run 的频道发事件"
-        content_parts: list[str] = []  # 流式回复的累积缓冲（每个 token chunk 一个元素） 
+        content_parts: list[str] = []  # 流式回复的累积缓冲（每个 token chunk 一个元素）
         usage: dict[str, Any] | None = None  # token 用量（等 LLM 最后一帧才出现）
-        model_name: str | None = None   # 实际响应的模型名（从响应元数据抓）
+        model_name: str | None = None  # 实际响应的模型名（从响应元数据抓）
         finish_reason: str | None = None  # 结束原因（stop/length/tool_calls...）
-        last_event_id: str | None = None  #  最近一次发布的事件 ID（SSE 断线续传游标）
+        last_event_id: str | None = None  # 最近一次发布的事件 ID（SSE 断线续传游标）
         last_snapshot_at = time.monotonic()  # 上次快照时间（monotonic 计时用）
 
         try:
