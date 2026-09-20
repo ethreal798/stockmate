@@ -1,0 +1,28 @@
+# ========== 基础镜像：pgvector PG17 ==========
+FROM pgvector/pgvector:0.8.6-pg17-trixie AS base
+
+# ========== 叠加 pg_textsearch（pglayers 预编译层，零编译） ==========
+COPY --from=ghcr.io/pglayers/pgx-pg_textsearch:17 / /
+
+# ========== 编译 zhparser（依赖 scws） ==========
+# 注意：必须加 pkg-config 和 postgresql-server-dev-${PG_MAJOR}
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates wget bzip2 make gcc pkg-config postgresql-server-dev-${PG_MAJOR} \
+    # 编译 scws
+    && cd /tmp \
+    && wget -q http://www.xunsearch.com/scws/down/scws-1.2.3.tar.bz2 \
+    && tar xjf scws-1.2.3.tar.bz2 \
+    && cd scws-1.2.3 && ./configure && make && make install \
+    # 编译 zhparser
+    && cd /tmp \
+    && wget -q https://github.com/amutu/zhparser/archive/refs/heads/master.tar.gz -O zhparser.tar.gz \
+    && tar xzf zhparser.tar.gz \
+    && cd zhparser-master && make && make install \
+    # 清理编译工具，缩小镜像
+    && apt-get purge -y ca-certificates wget bzip2 make gcc pkg-config postgresql-server-dev-${PG_MAJOR} \
+    && apt-get autoremove -y \
+    && rm -rf /tmp/* /var/lib/apt/lists/* /usr/local/src/*
+
+# 让 zhparser 能找到 libscws.so
+RUN ldconfig

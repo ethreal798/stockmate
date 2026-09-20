@@ -2,7 +2,10 @@ version: "3.9"
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.5-pg15-trixie
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.pg
+    command: postgres -c shared_preload_libraries=pg_textsearch,zhparser
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
