@@ -46,7 +46,7 @@ class EmbeddingService:
 
         # 3. 遍历所有批次，依次对每批的chunk完成向量化
         for start in range(0, len(chunks), batch_size):
-            batch = chunks[start: start + batch_size]
+            batch = chunks[start : start + batch_size]
             valid_pairs: list[tuple[RagChunk, str]] = []
             inputs = []
             # 3.1 遍历每批的chunk 将chunk的待向量化文本存入valid_pairs,inputs中
@@ -89,9 +89,7 @@ class EmbeddingService:
         # 注意：只更新所有 flash-v1 chunk 都已向量化的 document，
         # 避免 batch 间部分 chunk 成功、部分失败时误标记
         if embedded_document_ids:
-            fully_embedded_ids = await self._filter_fully_embedded_documents(
-                embedded_document_ids, embedding_model
-            )
+            fully_embedded_ids = await self._filter_fully_embedded_documents(embedded_document_ids, embedding_model)
             if fully_embedded_ids:
                 await self._update_document_stage(fully_embedded_ids, "embedded")
 
@@ -130,7 +128,7 @@ class EmbeddingService:
         payload: dict,
         headers: dict[str, str],
     ) -> httpx.Response:
-        """ 实际调用服务方 embedding模型 支持重试机制仅针对特定状态码 """
+        """实际调用服务方 embedding模型 支持重试机制仅针对特定状态码"""
         retryable_status_codes = {408, 409, 425, 429, 500, 502, 503, 504}
         max_retries = max(0, settings.AI_EMBEDDING_MAX_RETRIES)
 
@@ -208,27 +206,19 @@ class EmbeddingService:
             .correlate(RagDocument)
             .exists()
         )
-        stmt = (
-            select(RagDocument.id)
-            .where(RagDocument.id.in_(list(document_ids)))
-            .where(~unembedded_exists)
-        )
+        stmt = select(RagDocument.id).where(RagDocument.id.in_(list(document_ids))).where(~unembedded_exists)
         result = await self.db.execute(stmt)
         return set(result.scalars().all())
 
     async def _update_document_stage(self, document_ids: set[int], stage: str) -> None:
         """批量更新已完成向量化的 document 的 processing_stage。"""
-        stmt = (
-            update(RagDocument)
-            .where(RagDocument.id.in_(list(document_ids)))
-            .values(processing_stage=stage)
-        )
+        stmt = update(RagDocument).where(RagDocument.id.in_(list(document_ids))).values(processing_stage=stage)
         await self.db.execute(stmt)
         await self.db.commit()
 
     @staticmethod
     def _raise_for_embedding_error(response: httpx.Response, url: str) -> None:
-        """ 抛出错误给上游 并记录错误日志 """
+        """抛出错误给上游 并记录错误日志"""
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -241,7 +231,7 @@ class EmbeddingService:
 
     @staticmethod
     def _retry_delay_seconds(response: httpx.Response | None, attempt: int) -> float:
-        """ 优先尊重服务端指示等待时间，否则用指数退避 """
+        """优先尊重服务端指示等待时间，否则用指数退避"""
         retry_after = response.headers.get("Retry-After") if response is not None else None
         if retry_after:
             try:
@@ -253,7 +243,7 @@ class EmbeddingService:
 
     @staticmethod
     def _validate_vectors(vectors: list[list[float]], expected_count: int) -> None:
-        """ 初步校验服务商返回的响应结果 是否合理 1.数量 2.向量维度"""
+        """初步校验服务商返回的响应结果 是否合理 1.数量 2.向量维度"""
         if len(vectors) != expected_count:
             raise ValueError(f"Embedding result count mismatch: expected {expected_count}, got {len(vectors)}")
 

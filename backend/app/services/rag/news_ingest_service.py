@@ -19,9 +19,12 @@ class NewsIngestService:
         self.db = db
 
     async def ingest_telegraphs(
-        self, limit: int = 100, news_type: str = "all", source_code: str = "all",
+        self,
+        limit: int = 100,
+        news_type: str = "all",
+        source_code: str = "all",
     ) -> dict[str, int]:
-        """ 加载文档：支持指定数据类型及来源 """
+        """加载文档：支持指定数据类型及来源"""
         # 1. 构建查询语句 详见 _build_news_query
         stmt = self._build_news_query(limit=limit, news_type=news_type, source_code=source_code)
         # 2. 执行查询 并去重
@@ -43,7 +46,7 @@ class NewsIngestService:
         return stats
 
     async def list_documents(self, limit: int = 20) -> list[RagDocument]:
-        """ 返回RAG文档库中的文档 按limit指定数量 """
+        """返回RAG文档库中的文档 按limit指定数量"""
         result = await self.db.execute(select(RagDocument).order_by(desc(RagDocument.created_at)).limit(limit))
         return list(result.scalars().all())
 
@@ -86,7 +89,7 @@ class NewsIngestService:
         )
 
     def _build_document(self, item: NewsItem) -> RagDocument:
-        """ 文档入库：将资讯转换为RAG文档表格式 """
+        """文档入库：将资讯转换为RAG文档表格式"""
         content = item.content.strip()
 
         return RagDocument(
@@ -108,7 +111,7 @@ class NewsIngestService:
 
     @staticmethod
     def _build_metadata(item: NewsItem) -> dict[str, Any]:
-        """ 将资讯关联的数据打包进extra_metadata字段中 （目前未使用，但后续可能使用先保留）"""
+        """将资讯关联的数据打包进extra_metadata字段中 （目前未使用，但后续可能使用先保留）"""
         return {
             "source_code": item.source.code,
             "is_source_important": bool(item.is_source_important),
@@ -125,12 +128,12 @@ class NewsIngestService:
 
     @staticmethod
     def _hash_text(text: str) -> str:
-        """ 对内容进行哈希计算 用于去重  """
+        """对内容进行哈希计算 用于去重"""
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _original_document_url(item: NewsItem) -> str | None:
-        """ 提取资讯相关来源 """
+        """提取资讯相关来源"""
         return next((relation.url for relation in item.relations if relation.url), None)
 
     @staticmethod

@@ -45,7 +45,10 @@ class RetrievalService:
         sp_vec = await self.db.begin_nested()
         try:
             vector_items = await self._vector_retrieve(
-                query=query, top_k=top_k, days=days, model=embedding_model,
+                query=query,
+                top_k=top_k,
+                days=days,
+                model=embedding_model,
             )
             await sp_vec.commit()
         except Exception as exc:
@@ -93,9 +96,7 @@ class RetrievalService:
             items.append({"chunk": chunk, "score": score, "match_type": "vector"})
         return items
 
-    async def _keyword_retrieve(
-        self, query: str, top_k: int, days: int | None
-    ) -> list[dict[str, Any]]:
+    async def _keyword_retrieve(self, query: str, top_k: int, days: int | None) -> list[dict[str, Any]]:
         """pg_textsearch BM25 关键词检索。
 
         zhparser 在 PG 层自动做中文分词，应用层不需要分词。
@@ -141,9 +142,8 @@ class RetrievalService:
 
         # 用 ORM 查完整 RagChunk 对象
         from sqlalchemy import select as sa_select
-        chunks_result = await self.db.execute(
-            sa_select(RagChunk).where(RagChunk.id.in_(chunk_ids))
-        )
+
+        chunks_result = await self.db.execute(sa_select(RagChunk).where(RagChunk.id.in_(chunk_ids)))
         chunk_map = {c.id: c for c in chunks_result.scalars().all()}
 
         # 按 BM25 排名顺序组装结果
@@ -151,11 +151,13 @@ class RetrievalService:
         for cid in chunk_ids:
             chunk = chunk_map.get(cid)
             if chunk is not None:
-                items.append({
-                    "chunk": chunk,
-                    "score": rank_by_id[cid],
-                    "match_type": "bm25",
-                })
+                items.append(
+                    {
+                        "chunk": chunk,
+                        "score": rank_by_id[cid],
+                        "match_type": "bm25",
+                    }
+                )
         return items
 
     @staticmethod

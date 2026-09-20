@@ -46,28 +46,32 @@ class ResponseWrapperMiddleware:
 
     def __init__(self, app: ASGIApp):
         self.app = app
-    
-    # FastAPI 内置的 schema / 文档端点，这些响应不应被统一包装
-    _SKIP_PATHS = frozenset({
-        "/openapi.json",
-        "/openapi.yaml",
-        "/docs",
-        "/docs/",
-        "/docs/oauth2-redirect",
-        "/redoc",
-        "/redoc/",
-    })
 
     # FastAPI 内置的 schema / 文档端点，这些响应不应被统一包装
-    _SKIP_PATHS = frozenset({
-        "/openapi.json",
-        "/openapi.yaml",
-        "/docs",
-        "/docs/",
-        "/docs/oauth2-redirect",
-        "/redoc",
-        "/redoc/",
-    })
+    _SKIP_PATHS = frozenset(
+        {
+            "/openapi.json",
+            "/openapi.yaml",
+            "/docs",
+            "/docs/",
+            "/docs/oauth2-redirect",
+            "/redoc",
+            "/redoc/",
+        }
+    )
+
+    # FastAPI 内置的 schema / 文档端点，这些响应不应被统一包装
+    _SKIP_PATHS = frozenset(
+        {
+            "/openapi.json",
+            "/openapi.yaml",
+            "/docs",
+            "/docs/",
+            "/docs/oauth2-redirect",
+            "/redoc",
+            "/redoc/",
+        }
+    )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # 只处理 HTTP 请求
@@ -80,12 +84,12 @@ class ResponseWrapperMiddleware:
         if path in self._SKIP_PATHS:
             await self.app(scope, receive, send)
             return
-        
+
         # 检查是否是 FastAPI 内置的 schema / 文档端点
         if scope["path"] in self._SKIP_PATHS:
             await self.app(scope, receive, send)
             return
-                
+
         # 存储响应信息
         status_code = None
         response_headers = []

@@ -171,7 +171,9 @@ class NewsCrawler:
         if skip_empty or skip_short:
             logger.info(
                 "News hard-excluded: source=%s R1_empty=%d R2_short=%d",
-                source_code, skip_empty, skip_short,
+                source_code,
+                skip_empty,
+                skip_short,
             )
         return inserted_count
 

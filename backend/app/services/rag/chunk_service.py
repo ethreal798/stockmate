@@ -128,7 +128,7 @@ class ChunkService:
 
     @staticmethod
     def _build_pending_documents_query(limit: int) -> Select[tuple[RagDocument]]:
-        """ 取未切分的文档 按limit取对应条数 """
+        """取未切分的文档 按limit取对应条数"""
         # LEFT JOIN rag_chunks 过滤掉已切片的文档，一次查询搞定
         return (
             select(RagDocument)
@@ -179,7 +179,7 @@ class ChunkService:
 
     @staticmethod
     def _estimate_token_count(text: str) -> int:
-        """ 中文字符 = 1 token ， 英文/数字单词 = 1 token ，直接相加 """
+        """中文字符 = 1 token ， 英文/数字单词 = 1 token ，直接相加"""
         chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
         non_chinese_words = len(re.findall(r"[A-Za-z0-9_]+", text))
         return chinese_chars + non_chinese_words

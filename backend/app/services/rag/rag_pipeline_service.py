@@ -144,7 +144,7 @@ class RagPipelineService:
 
     @staticmethod
     def _has_progress(result: dict[str, Any]) -> bool:
-        """ 判断本次作业结果是否成功 """
+        """判断本次作业结果是否成功"""
         ingest = result.get("ingest") or {}
         chunk = result.get("chunk") or {}
         embed = result.get("embed") or {}
@@ -160,7 +160,7 @@ class RagPipelineService:
 
     @staticmethod
     def _accumulate_totals(totals: dict[str, int], result: dict[str, Any]) -> None:
-        """ 计算三阶段的执行结果 """
+        """计算三阶段的执行结果"""
         for stage in ("ingest", "chunk", "embed"):
             stats = result.get(stage) or {}
             for key, value in stats.items():

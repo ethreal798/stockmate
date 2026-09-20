@@ -129,13 +129,13 @@ class AgentService:
         active = await self.get_active_run(user_id, thread_id)
         if active is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="当前会话已有活动任务")
-        
+
         # 5. 序号分配：sequence 是会话内消息的显示顺序
         max_sequence = (
             await self.db.execute(select(func.max(AgentMessage.sequence)).where(AgentMessage.thread_id == thread_id))
         ).scalar_one_or_none()
         user_sequence = 0 if max_sequence is None else max_sequence + 1
- 
+
         # 6. 在应用代码中预生成 UUID（而非依赖数据库生成），因为三个对象互相引用，需在 flush 前于内存中组成完整对象图
         run_id = uuid.uuid4()
         user_message_id = uuid.uuid4()
@@ -186,7 +186,7 @@ class AgentService:
         # 9. 如果会话标题仍是默认占位 "New conversation"（即尚未命名的新会话），用首条用户消息生成标题
         if thread.title == "New conversation":
             thread.title = self._initial_title(request.message)
-        
+
         # 10. 防止同用户、同 client_request_id、但落在不同 thread 的并发提交问题
         try:
             await self.db.flush()
@@ -356,18 +356,18 @@ class AgentService:
 
 async def claim_next_run(db: AsyncSession, worker_id: str) -> AgentRun | None:
     """使用 SKIP LOCKED 原子领取最早的 pending Run。
-        SELECT * FROM agent_runs
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED;
+    SELECT * FROM agent_runs
+    WHERE status = 'pending'
+    ORDER BY created_at ASC
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED;
     """
-    # 1. 从数据库查询最早的 pending Run 任务    
+    # 1. 从数据库查询最早的 pending Run 任务
     stmt = (
         select(AgentRun)
         .where(AgentRun.status == "pending")
         .order_by(AgentRun.created_at.asc())
-        .with_for_update(skip_locked=True) # 2. 仅查询未被其他事务锁定的任务 并锁定该任务
+        .with_for_update(skip_locked=True)  # 2. 仅查询未被其他事务锁定的任务 并锁定该任务
         .limit(1)
     )
     run = (await db.execute(stmt)).scalar_one_or_none()
