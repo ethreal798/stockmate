@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import select, update
 
@@ -25,7 +25,9 @@ from app.services.agent.llm_factory import LLMFactory
 from app.services.agent.prompt_template_service import PromptTemplateService
 from app.services.agent.runtime_model_config_service import RuntimeModelConfigService
 from app.services.agent.event_stream import AgentEventStream
-from app.services.agent.graph import build_general_chat_graph
+from app.services.agent.graph import build_general_chat_graph, build_tool_chat_graph
+from app.services.agent.tools.base import ToolContext
+from app.services.agent.tools import get_all_tools
 from app.services.agent.agent_service import claim_next_run
 
 logger = logging.getLogger(__name__)
@@ -111,7 +113,18 @@ class AgentRunWorker:
             llm = self.llm_factory.create_chat_model(model_config, streaming=True)
             # 3. 组装 LangGraph 图。三个注入项：本任务专属的 llm、本任务的系统提示词、全局共享的 checkpointer
             # （同一 worker 的所有任务共用一个存档器连接池，但按 thread_id 隔离数据）
-            graph = build_general_chat_graph(llm=llm, system_prompt=system_prompt, checkpointer=checkpointer)
+
+            if run.capability == "general":
+                # 普通聊天
+                graph = build_general_chat_graph(llm=llm, system_prompt=system_prompt, checkpointer=checkpointer)
+            else:
+                # 带工具
+                tool_ctx = ToolContext(user_id=run.user_id)
+                tools = get_all_tools(tool_ctx)
+                graph = build_tool_chat_graph(llm=llm, system_prompt=system_prompt,
+                                              checkpointer=checkpointer, tools=tools,
+                                              )
+
             config = {
                 "configurable": {
                     "thread_id": str(run.thread_id),
@@ -127,16 +140,21 @@ class AgentRunWorker:
                 run_id, run.thread_id, run.user_id, model_config.model, len(user_message.content),
             )
             async for chunk, _metadata in graph.astream(
-                {
-                    "messages": [HumanMessage(content=user_message.content)],
-                    "user_id": run.user_id,
-                    "thread_id": str(run.thread_id),
-                    "model_config_id": run.model_config_id,
-                    "capability": run.capability,
-                 },
-                config=config,
-                stream_mode="messages",
+                    {
+                        "messages": [HumanMessage(content=user_message.content)],
+                        "user_id": run.user_id,
+                        "thread_id": str(run.thread_id),
+                        "model_config_id": run.model_config_id,
+                        "capability": run.capability,
+                        "max_tool_calls": 5
+                    },
+                    config=config,
+                    stream_mode="messages",
             ):
+                # ToolMessage 是内部执行结果，不推给前端
+                if isinstance(chunk, ToolMessage):
+                    continue
+
                 # 获取本次任务对话信息 如模型名、token 用量、结束原因等 可能为空因为不是最终帧
                 model_name = self._extract_model_name(chunk) or model_name
                 chunk_usage = getattr(chunk, "usage_metadata", None)
@@ -230,14 +248,14 @@ class AgentRunWorker:
                 return run.status == "cancel_requested"
 
     async def _finish_completed(
-        self,
-        run_id: UUID,
-        *,
-        content: str,
-        last_event_id: str | None,
-        usage: dict[str, Any] | None,
-        model_name: str,
-        finish_reason: str,
+            self,
+            run_id: UUID,
+            *,
+            content: str,
+            last_event_id: str | None,
+            usage: dict[str, Any] | None,
+            model_name: str,
+            finish_reason: str,
     ) -> str:
         """在同一事务中完成 Run、助手消息和会话 Token 统计。"""
         input_tokens, output_tokens, total_tokens = self._parse_usage(usage)
@@ -298,11 +316,11 @@ class AgentRunWorker:
         message.finish_reason = "abort"
 
     async def _finish_failed(
-        self,
-        run_id: UUID,
-        content: str,
-        last_event_id: str | None,
-        error_message: str,
+            self,
+            run_id: UUID,
+            content: str,
+            last_event_id: str | None,
+            error_message: str,
     ) -> None:
         """持久化任务失败信息和已经生成的部分内容。"""
         async with async_session_factory() as db:
