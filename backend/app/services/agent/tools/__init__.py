@@ -8,13 +8,19 @@ from langchain_core.tools import BaseTool
 
 from app.services.agent.tools.base import ToolContext
 from app.services.agent.tools.fund_tools import create_fund_tools
+from app.services.agent.tools.rag_tools import create_rag_tools
 
 
 def get_all_tools(context: ToolContext) -> list[BaseTool]:
-    """根据 ToolContext 创建所有已注册的工具实例"""
+    """根据 ToolContext 创建所有已注册的工具实例。
+    
+    注册顺序：基金工具 → RAG 工具。
+    模型通过工具描述自行选择，顺序不影响执行。
+    """
+
     tools: list[BaseTool] = []
     tools.extend(create_fund_tools(context))
-
+    tools.extend(create_rag_tools(context))
     return tools
 
 

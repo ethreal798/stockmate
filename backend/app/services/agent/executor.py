@@ -60,6 +60,10 @@ class AgentRunExecutor:
         finish_reason: str | None = None
         last_event_id: str | None = None
         last_snapshot_at = time.monotonic()
+        
+        # citations 收集（跨多轮 ReAct 调用持续累积，按 chunk_id 去重）
+        collected_citations: list[dict] = []
+        seen_chunk_ids: set[int] = set()
 
         try:
             # 1. 读任务元数据（只在任务开始时读一次，随后释放 DB 连接）
@@ -116,6 +120,19 @@ class AgentRunExecutor:
             ):
                 # 跳过内部 ToolMessage
                 if isinstance(chunk, ToolMessage):
+                    parsed = self._extract_citations_from_tool_content(
+                        getattr(chunk, "content", "")
+                    )
+                    if parsed:
+                        for c in parsed:
+                            cid = c.get("chunk_id")
+                            if cid and cid not in seen_chunk_ids:
+                                collected_citations.append(c)
+                                seen_chunk_ids.add(cid)
+                                logger.debug(
+                                    "[executor] 收集 citation: chunk_id=%s title=%s",
+                                    cid, c.get("title"),
+                                )
                     continue
 
                 # 解析 chunk 元数据（可能为空，因为不是最终帧）
@@ -168,6 +185,7 @@ class AgentRunExecutor:
                 output_tokens=output_tokens,
                 model_name=model_name or model_config.model,
                 finish_reason=finish_reason or "stop",
+                citations=collected_citations or None,
             )
             logger.info(
                 "Run finished: run_id=%s status=%s finish_reason=%s model=%s usage=%s",
@@ -263,3 +281,27 @@ class AgentRunExecutor:
         if total_tokens is None and (input_tokens is not None or output_tokens is not None):
             total_tokens = (input_tokens or 0) + (output_tokens or 0)
         return input_tokens, output_tokens, total_tokens
+
+    # ------------------------------------------------------------------
+    # Citations 标记解析（和 rag_tools.py 里的 _extract_citations_from_tool_content 逻辑一致）
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _extract_citations_from_tool_content(content: str) -> list[dict] | None:
+        """从 ToolMessage.content 里的 <!--CITATIONS:...--> 标记解析 citations。
+
+        Returns:
+            None — 没有标记（不是每个工具都会带 citations）
+            []  — 有标记但 JSON 解析失败（警告级别）
+            list[dict] — 成功
+        """
+        import json
+        import re
+
+        match = re.search(r"<!--CITATIONS:(.+?)-->", content, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(1))
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to parse CITATIONS marker in tool output")
+            return []

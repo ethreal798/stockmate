@@ -82,6 +82,7 @@ class AgentRunRepository:
         output_tokens: int | None,
         model_name: str,
         finish_reason: str,
+        citations: list[dict] | None = None,
     ) -> str:
         """在同一事务中完成 Run、助手消息和会话 Token 统计。
 
@@ -123,6 +124,7 @@ class AgentRunRepository:
                 message.input_tokens = input_tokens
                 message.output_tokens = output_tokens
                 message.total_tokens = total_tokens
+                message.citations = citations
                 thread = (
                     await db.execute(
                         select(AgentThread)
