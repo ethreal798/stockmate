@@ -14,9 +14,10 @@ class AgentState(TypedDict):
     capability: str
 
     # 工具调用相关
-    # agent 节点每次调用工具时 +1，超过阈值直接走 END 避免无限循环
+    # 已完成的工具调用轮次计数（一轮 = agent 输出有 tool_calls + 执行完 tools）
+    tool_call_count: int
+    # 最大工具调用次数（防死循环）
     max_tool_calls: int
-    # tool_results: list[dict]
 
     # RAG 相关
     # retrieved_docs: list[dict]

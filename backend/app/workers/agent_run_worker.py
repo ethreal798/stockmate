@@ -146,7 +146,8 @@ class AgentRunWorker:
                         "thread_id": str(run.thread_id),
                         "model_config_id": run.model_config_id,
                         "capability": run.capability,
-                        "max_tool_calls": 5
+                        "max_tool_calls": 5,
+                        "tool_call_count": 0,
                     },
                     config=config,
                     stream_mode="messages",
