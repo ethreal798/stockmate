@@ -14,17 +14,11 @@ class RagDocument(GormBaseModel):
 
     source_type = Column(String(50), index=True, nullable=False, comment="来源类型: telegraph/news/notice/report")
     source_id = Column(BigInteger, index=True, nullable=False, comment="来源记录ID")
+    source_name = Column(String(100), index=True, nullable=True, comment="来源名称")
     title = Column(String(500), nullable=True, comment="文档标题")
     content = Column(Text, nullable=False, comment="文档正文")
-    content_hash = Column(String(64), index=True, nullable=False, comment="正文哈希")
-    summary = Column(Text, nullable=True, comment="预生成摘要")
     published_at = Column(DateTime, index=True, nullable=True, comment="发布时间")
-    source_name = Column(String(100), index=True, nullable=True, comment="来源名称")
-    url = Column(String(500), nullable=True, comment="原文链接")
-    category = Column(String(50), index=True, nullable=True, comment="新闻分类")
     importance_score = Column(Integer, default=0, server_default="0", comment="重要性评分")
-    sentiment = Column(String(50), index=True, nullable=True, comment="情绪标签")
-    language = Column(String(20), default="zh", server_default="zh", comment="语言")
     status = Column(String(20), default="pending", server_default="pending", index=True, comment="处理状态")
     extra_metadata = Column(JSON, nullable=True, comment="扩展元数据")
     processing_stage = Column(
@@ -49,22 +43,14 @@ class RagChunk(GormBaseModel):
     document_id = Column(BigInteger, ForeignKey("rag_documents.id", ondelete="CASCADE"), index=True, nullable=False)
     chunk_index = Column(Integer, nullable=False, comment="文档内块序号")
     chunk_text = Column(Text, nullable=False, comment="分块内容")
-    chunk_hash = Column(String(64), index=True, nullable=False, comment="分块哈希")
-    token_count = Column(Integer, default=0, server_default="0", comment="估算 token 数")
-    start_offset = Column(Integer, default=0, server_default="0")
-    end_offset = Column(Integer, default=0, server_default="0")
     published_at = Column(DateTime, index=True, nullable=True)
     source_name = Column(String(100), index=True, nullable=True)
-    category = Column(String(50), index=True, nullable=True)
-    importance_score = Column(Integer, default=0, server_default="0")
-    sentiment = Column(String(50), index=True, nullable=True)
     extra_metadata = Column(JSON, nullable=True, comment="块级元数据")
     chunking_version = Column(String(30), nullable=True, comment="切片策略版本: flash-v1")
     embedding_text = Column(Text, nullable=True, comment="向量化输入文本（标题+正文模板）")
 
     document = relationship("RagDocument", back_populates="chunks")
     embeddings = relationship("RagChunkEmbedding", back_populates="chunk", cascade="all, delete-orphan")
-    events = relationship("RagEvent", back_populates="chunk", cascade="all, delete-orphan")
 
     __table_args__ = (Index("idx_rag_chunks_doc_chunk", "document_id", "chunk_index", unique=True),)
 
@@ -92,13 +78,9 @@ class RagEvent(GormBaseModel):
     __tablename__ = "rag_events"
 
     document_id = Column(BigInteger, ForeignKey("rag_documents.id", ondelete="CASCADE"), index=True, nullable=False)
-    chunk_id = Column(BigInteger, ForeignKey("rag_chunks.id", ondelete="CASCADE"), index=True, nullable=True)
     entity_type = Column(String(50), index=True, nullable=False, comment="stock/industry/concept/macro/person/org")
     entity_name = Column(String(200), index=True, nullable=True)
     entity_code = Column(String(50), nullable=True)
-    alias = Column(String(200), nullable=True)
-    weight = Column(Float, default=0, server_default="0", comment="实体权重")
-    extra_metadata = Column(JSON, nullable=True)
     event_time = Column(DateTime, nullable=True, comment="事件发生时间")
     industry_category = Column(String(50), nullable=True, comment="一级行业（聚合用，固定枚举）")
     industry_tag = Column(String(100), nullable=True, comment="二级行业（细粒度标注）")
@@ -107,7 +89,6 @@ class RagEvent(GormBaseModel):
     confidence = Column(Float, nullable=True, comment="LLM 自评置信度 0.0-1.0")
 
     document = relationship("RagDocument", back_populates="events")
-    chunk = relationship("RagChunk", back_populates="events")
 
     __table_args__ = (
         Index("idx_rag_events_type_name", "entity_type", "entity_name"),

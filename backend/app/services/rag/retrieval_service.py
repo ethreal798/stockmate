@@ -213,10 +213,7 @@ class RetrievalService:
             "title": metadata.get("document_title"),
             "content": chunk.chunk_text,
             "source_name": chunk.source_name,
-            "url": metadata.get("document_url"),
             "published_at": chunk.published_at,
-            "category": chunk.category,
-            "sentiment": chunk.sentiment,
             "score": round(float(item.get("rrf_score", item["score"])), 6),
             "match_type": item["match_type"],
         }

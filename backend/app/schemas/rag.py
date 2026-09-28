@@ -12,16 +12,11 @@ class RagDocumentResponse(BaseModel):
     id: int
     source_type: str
     source_id: int
+    source_name: Optional[str] = None
     title: Optional[str] = None
     content: str
-    content_hash: str
     published_at: Optional[datetime] = None
-    source_name: Optional[str] = None
-    url: Optional[str] = None
-    category: Optional[str] = None
     importance_score: int = 0
-    sentiment: Optional[str] = None
-    language: str = "zh"
     status: str = "pending"
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -36,15 +31,8 @@ class RagChunkResponse(BaseModel):
     document_id: int
     chunk_index: int
     chunk_text: str
-    chunk_hash: str
-    token_count: int = 0
-    start_offset: int = 0
-    end_offset: int = 0
     published_at: Optional[datetime] = None
     source_name: Optional[str] = None
-    category: Optional[str] = None
-    importance_score: int = 0
-    sentiment: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -111,7 +99,8 @@ class RagNewsPipelineRequest(BaseModel):
     relevant_only: bool = Field(True, description="是否仅处理金融相关资讯")
     chunk_limit: int = Field(100, ge=1, le=1000, description="本次最多切分多少篇文档")
     embed_limit: int = Field(100, ge=1, le=1000, description="本次最多向量化多少个 chunk")
-    embedding_model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
+    event_limit: Optional[int] = Field(None, ge=1, le=1000, description="本次最多抽取事件的文档数，None 走配置默认值")
+    # embedding_model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
 
 
 class RagNewsPipelineDrainRequest(RagNewsPipelineRequest):
@@ -130,6 +119,7 @@ class RagNewsPipelineResponse(BaseModel):
     ingest: Optional[RagNewsIngestResponse] = None
     chunk: Optional[RagChunkBatchResponse] = None
     embed: Optional[RagEmbedResponse] = None
+    event: Optional["RagEventExtractResponse"] = None
 
 
 class RagNewsPipelineDrainResponse(BaseModel):
@@ -163,10 +153,7 @@ class RagRetrieveItem(BaseModel):
     title: Optional[str] = None
     content: str
     source_name: Optional[str] = None
-    url: Optional[str] = None
     published_at: Optional[datetime] = None
-    category: Optional[str] = None
-    sentiment: Optional[str] = None
     score: float
     match_type: str
 
@@ -189,7 +176,6 @@ class RagCitation(BaseModel):
     document_id: int
     title: Optional[str] = None
     source_name: Optional[str] = None
-    url: Optional[str] = None
     published_at: Optional[datetime] = None
     score: Optional[float] = None
     match_type: Optional[str] = None
@@ -214,3 +200,22 @@ class RagChatResponse(BaseModel):
     retrieved_count: int = 0
     model: str
     usage: Optional[dict] = None
+
+
+class RagEventExtractRequest(BaseModel):
+    """RAG 事件抽取请求（Stage 3）。"""
+
+    limit: Optional[int] = Field(None, ge=1, le=1000, description="本次最多抽取事件的文档数，None 走配置默认值")
+
+
+class RagEventExtractResponse(BaseModel):
+    """RAG 事件抽取响应。"""
+
+    success: bool = True
+    scanned: int = 0
+    extracted: int = 0
+    skipped_r4: int = 0
+    failed: int = 0
+    saved_events_count: int = 0
+    model: str
+    error: Optional[str] = None

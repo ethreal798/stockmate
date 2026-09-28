@@ -9,7 +9,6 @@ FlashV1 核心逻辑（基于财联社 17968 条实证定稿）：
   - 新版按语义分点切，仅对多事件汇总类（1.16%）切分
 """
 
-import hashlib
 import re
 
 from sqlalchemy import Select, desc, select
@@ -149,18 +148,10 @@ class ChunkService:
             chunk_text=chunk_text,
             embedding_text=embedding_text,
             chunking_version=self.chunking_version,
-            chunk_hash=self._hash_text(chunk_text),
-            token_count=self._estimate_token_count(chunk_text),
-            start_offset=int(chunk_data["start"]),
-            end_offset=int(chunk_data["end"]),
             published_at=document.published_at,
             source_name=document.source_name,
-            category=document.category,
-            importance_score=document.importance_score or 0,
-            sentiment=document.sentiment,
             extra_metadata={
                 "document_title": document.title,
-                "document_url": document.url,
                 "source_type": document.source_type,
                 "source_id": document.source_id,
             },
@@ -176,14 +167,3 @@ class ChunkService:
         if title and title not in chunk_text:
             return f"{title}\n{chunk_text}"
         return chunk_text
-
-    @staticmethod
-    def _estimate_token_count(text: str) -> int:
-        """中文字符 = 1 token ， 英文/数字单词 = 1 token ，直接相加"""
-        chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
-        non_chinese_words = len(re.findall(r"[A-Za-z0-9_]+", text))
-        return chinese_chars + non_chinese_words
-
-    @staticmethod
-    def _hash_text(text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()

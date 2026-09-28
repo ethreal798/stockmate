@@ -95,16 +95,11 @@ class NewsIngestService:
         return RagDocument(
             source_type=item.content_type,
             source_id=item.id,
+            source_name=item.source.name,
             title=(item.title or "").strip() or None,
             content=content,
-            content_hash=self._hash_text(content),
             published_at=self._rag_datetime(item.published_at),
-            source_name=item.source.name,
-            url=self._original_document_url(item),
-            category=None,
             importance_score=100 if item.is_source_important else 0,
-            sentiment=None,
-            language="zh",
             status="pending",
             extra_metadata=self._build_metadata(item),
         )
@@ -126,15 +121,6 @@ class NewsIngestService:
             ],
         }
 
-    @staticmethod
-    def _hash_text(text: str) -> str:
-        """对内容进行哈希计算 用于去重"""
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-    @staticmethod
-    def _original_document_url(item: NewsItem) -> str | None:
-        """提取资讯相关来源"""
-        return next((relation.url for relation in item.relations if relation.url), None)
 
     @staticmethod
     def _rag_datetime(value):
