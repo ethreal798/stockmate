@@ -1,13 +1,18 @@
 """RAG pipeline orchestration service."""
 
+import logging
 import time
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.services.rag.chunk_service import ChunkService
 from app.services.rag.embedding_service import EmbeddingService
+from app.services.rag.event_extractor import EventExtractorService
 from app.services.rag.news_ingest_service import NewsIngestService
+
+logger = logging.getLogger(__name__)
 
 
 class RagPipelineService:
@@ -18,6 +23,7 @@ class RagPipelineService:
         self.news_ingest_service = NewsIngestService(db)
         self.chunk_service = ChunkService(db)
         self.embedding_service = EmbeddingService(db)
+        self.event_extractor_service = EventExtractorService(db)
 
     # 流水线入口
     async def run_news_pipeline_drain(
@@ -30,6 +36,7 @@ class RagPipelineService:
         relevant_only: bool = True,
         chunk_limit: int = 100,
         embed_limit: int = 100,
+        event_limit: int | None = None,
         embedding_model: str | None = None,
     ) -> dict[str, Any]:
         started_at = time.monotonic()
@@ -44,12 +51,13 @@ class RagPipelineService:
                 stopped_reason = "max_seconds"
                 break
 
-            # 2. 调用接口执行 入库 -> 切片 -> 向量化
+            # 2. 调用接口执行 入库 -> 切片 -> 向量化 -> 事件抽取
             batch_result = await self.run_news_pipeline(
                 news_limit=news_limit,
                 news_type=news_type,
                 chunk_limit=chunk_limit,
                 embed_limit=embed_limit,
+                event_limit=event_limit,
                 embedding_model=embedding_model,
             )
             # 3. 统计结果
@@ -84,7 +92,7 @@ class RagPipelineService:
             "batches": batches,
         }
 
-    # 实际执行 入库 -> 切片 -> 向量化操作
+    # 实际执行 入库 -> 切片 -> 向量化 -> 事件抽取操作
     async def run_news_pipeline(
         self,
         *,
@@ -92,6 +100,7 @@ class RagPipelineService:
         news_type: str = "all",
         chunk_limit: int = 100,
         embed_limit: int = 100,
+        event_limit: int | None = None,
         embedding_model: str | None = None,
     ) -> dict[str, Any]:
         # 组装返回结果
@@ -102,6 +111,7 @@ class RagPipelineService:
             "ingest": None,
             "chunk": None,
             "embed": None,
+            "event": None,
         }
 
         # 1. 同步资讯进RAG文档表
@@ -133,6 +143,17 @@ class RagPipelineService:
             await self.db.rollback()
             return self._mark_failed(result, "embed", exc)
 
+        # 4. LLM 事件抽取（Step3：降级，失败不影响 pipeline success）
+        if settings.RAG_EVENT_EXTRACTION_SWITCH:
+            try:
+                result["event"] = await self.event_extractor_service.extract_pending(
+                    limit=event_limit,
+                )
+            except Exception as exc:
+                # 降级：Stage3 失败只记 warning，pipeline 依然 success
+                logger.warning("Stage3 event extraction failed (degraded): %s", exc, exc_info=True)
+                result["event"] = {"error": str(exc)}
+
         result["success"] = True
         return result
 
@@ -148,6 +169,7 @@ class RagPipelineService:
         ingest = result.get("ingest") or {}
         chunk = result.get("chunk") or {}
         embed = result.get("embed") or {}
+        event = result.get("event") or {}
         progressed = (
             int(ingest.get("ingested", 0))
             + int(chunk.get("chunked_documents", 0))
@@ -155,13 +177,15 @@ class RagPipelineService:
             + int(chunk.get("skipped_existing", 0))
             + int(chunk.get("skipped_invalid", 0))
             + int(embed.get("embedded", 0))
+            + int(event.get("extracted", 0))
+            + int(event.get("skipped_r4", 0))
         )
         return progressed > 0
 
     @staticmethod
     def _accumulate_totals(totals: dict[str, int], result: dict[str, Any]) -> None:
-        """计算三阶段的执行结果"""
-        for stage in ("ingest", "chunk", "embed"):
+        """计算四阶段的执行结果"""
+        for stage in ("ingest", "chunk", "embed", "event"):
             stats = result.get(stage) or {}
             for key, value in stats.items():
                 if isinstance(value, int):

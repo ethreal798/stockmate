@@ -127,6 +127,14 @@ class Settings(BaseSettings):
     # 最大向量化数据量
     RAG_PIPELINE_EMBED_LIMIT: int = 100
 
+    # ---- RAG 事件抽取配置（Stage 3） ----
+    RAG_EVENT_EXTRACTION_SWITCH: bool = True            # 总开关
+    RAG_EVENT_EXTRACTION_BATCH_SIZE: int = 100          # 批量 commit 大小
+    RAG_EVENT_EXTRACTION_CONCURRENCY: int = 10          # LLM 并发数（asyncio.Semaphore）
+    RAG_EVENT_EXTRACTION_LIMIT_PER_DRAIN: int = 50       # 每次 drain 最多处理的文档数（避免爆 LLM）
+    RAG_EVENT_EXTRACTION_LLM_MODEL: str = "qwen3.8-flash"
+    RAG_EVENT_EXTRACTION_MAX_EVENTS: int = 3             # 单文档最多抽取事件数（Prompt 约束）
+
     # ---- 备用 AI 模型配置（Ollama / DeepSeek 等） ----
     AI_OLLAMA_BASE_URL: str = "http://localhost:11434"
     AI_OLLAMA_MODEL: str = "qwen2.5:7b"
