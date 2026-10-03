@@ -133,6 +133,13 @@ class AgentRunExecutor:
                                     "[executor] 收集 citation: chunk_id=%s title=%s",
                                     cid, c.get("title"),
                                 )
+                        # 重新编号：确保跨多次工具调用的 index 全局唯一（1..N）
+                        for idx, c in enumerate(collected_citations, start=1):
+                            c["index"] = idx
+                        # 工具返回后立刻发 SSE citations 事件，前端可以在流式过程中拿到
+                        await events.publish(
+                            run_id, "citations", {"items": collected_citations}
+                        )
                     continue
 
                 # 解析 chunk 元数据（可能为空，因为不是最终帧）
