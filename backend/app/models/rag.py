@@ -18,7 +18,6 @@ class RagDocument(GormBaseModel):
     title = Column(String(500), nullable=True, comment="文档标题")
     content = Column(Text, nullable=False, comment="文档正文")
     published_at = Column(DateTime, index=True, nullable=True, comment="发布时间")
-    importance_score = Column(Integer, default=0, server_default="0", comment="重要性评分")
     status = Column(String(20), default="pending", server_default="pending", index=True, comment="处理状态")
     extra_metadata = Column(JSON, nullable=True, comment="扩展元数据")
     processing_stage = Column(

@@ -16,7 +16,6 @@ class RagDocumentResponse(BaseModel):
     title: Optional[str] = None
     content: str
     published_at: Optional[datetime] = None
-    importance_score: int = 0
     status: str = "pending"
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -169,7 +168,12 @@ class RagRetrieveResponse(BaseModel):
 
 
 class RagCitation(BaseModel):
-    """RAG 回答引用来源。"""
+    """RAG 回答引用来源。
+
+    只有前端 hover 预览和底部卡片列表需要的轻量字段。
+    document_url 放在 RagDocument.extra_metadata，前端通过 document_id
+    调 GET /ai/rag/documents/{document_id} 按需获取。
+    """
 
     index: int
     chunk_id: int
@@ -179,6 +183,21 @@ class RagCitation(BaseModel):
     published_at: Optional[datetime] = None
     score: Optional[float] = None
     match_type: Optional[str] = None
+    excerpt: Optional[str] = None
+
+
+class RagDocumentDetailResponse(BaseModel):
+    """单 document 详情（点击「查看原文」或卡片时查询全文）。"""
+
+    id: int
+    source_type: str
+    source_name: Optional[str] = None
+    title: Optional[str] = None
+    content: str
+    published_at: Optional[datetime] = None
+    extra_metadata: Optional[dict] = None
+
+    model_config = {"from_attributes": True}
 
 
 class RagChatRequest(BaseModel):
@@ -219,3 +238,31 @@ class RagEventExtractResponse(BaseModel):
     saved_events_count: int = 0
     model: str
     error: Optional[str] = None
+
+
+# ──────────────────────────────────────────────────────────────
+# Stage 4：功能一（行业趋势分析）
+# ──────────────────────────────────────────────────────────────
+
+from typing import Any, Literal
+
+
+class IndustryTrendRequest(BaseModel):
+    """行业趋势分析请求（功能一）。"""
+
+    time_range: Literal["1w", "1m", "3m", "6m"] = Field("1m", description="时间窗口：1周/1月/3月/6月")
+    llm_model: Optional[str] = Field(None, description="LLM 模型，None 用默认值")
+
+
+class IndustryTrendResponse(BaseModel):
+    """行业趋势分析响应。"""
+
+    time_range: str
+    start_time: str
+    end_time: str
+    model: Optional[str] = None
+    industries: list[dict[str, Any]]
+    global_sentiment: dict[str, Any]
+    top_events: list[dict[str, Any]]
+    analysis: str
+    citations: list[str] = []

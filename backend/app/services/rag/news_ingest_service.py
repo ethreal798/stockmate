@@ -99,16 +99,15 @@ class NewsIngestService:
             title=(item.title or "").strip() or None,
             content=content,
             published_at=self._rag_datetime(item.published_at),
-            importance_score=100 if item.is_source_important else 0,
             status="pending",
             extra_metadata=self._build_metadata(item),
         )
 
     @staticmethod
     def _build_metadata(item: NewsItem) -> dict[str, Any]:
-        """将资讯关联的数据打包进extra_metadata字段中 （目前未使用，但后续可能使用先保留）"""
+        """将资讯关联的数据打包进 extra_metadata 字段中。"""
+        document_url = item.relations[0].url if item.relations else None
         return {
-            "source_code": item.source.code,
             "is_source_important": bool(item.is_source_important),
             "topics": [topic.name for topic in item.topics],
             "entities": [
@@ -119,8 +118,8 @@ class NewsIngestService:
                 }
                 for entity in item.entities
             ],
+            "document_url": document_url,
         }
-
 
     @staticmethod
     def _rag_datetime(value):

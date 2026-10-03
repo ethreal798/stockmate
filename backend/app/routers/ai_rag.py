@@ -1,15 +1,18 @@
 """AI RAG 路由。"""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.models.rag import RagDocument
 from app.schemas.rag import (
     RagChatRequest,
     RagChatResponse,
     RagChunkBatchResponse,
     RagChunkRequest,
     RagChunkResponse,
+    RagDocumentDetailResponse,
     RagDocumentResponse,
     RagEmbedRequest,
     RagEmbedResponse,
@@ -26,6 +29,7 @@ from app.schemas.rag import (
 from app.services.rag.chunk_service import ChunkService
 from app.services.rag.embedding_service import EmbeddingService
 from app.services.rag.event_extractor import EventExtractorService
+from app.services.rag.market_analysis_service import MarketAnalysisService
 from app.services.rag.news_ingest_service import NewsIngestService
 from app.services.rag.rag_pipeline_service import RagPipelineService
 from app.services.rag.rag_service import RagService
@@ -56,6 +60,10 @@ def get_rag_service(db: AsyncSession = Depends(get_db)) -> RagService:
 
 def get_rag_pipeline_service(db: AsyncSession = Depends(get_db)) -> RagPipelineService:
     return RagPipelineService(db)
+
+
+def get_market_analysis_service(db: AsyncSession = Depends(get_db)) -> MarketAnalysisService:
+    return MarketAnalysisService(db)
 
 
 def get_event_extractor_service(db: AsyncSession = Depends(get_db)) -> EventExtractorService:
@@ -238,3 +246,20 @@ async def chat(
         model=request.model,
     )
     return RagChatResponse.model_validate(result)
+
+
+@router.get(
+    "/documents/{document_id}",
+    response_model=RagDocumentDetailResponse,
+    summary="查询单个 RAG document 详情",
+    description="根据 document_id 返回文档全文，点击「查看原文」或 citation 卡片时按需加载。",
+)
+async def get_document_detail(
+    document_id: int = Path(..., ge=1, description="RAG document ID"),
+    db: AsyncSession = Depends(get_db),
+) -> RagDocumentDetailResponse:
+    result = await db.execute(select(RagDocument).where(RagDocument.id == document_id))
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"RAG document {document_id} 不存在")
+    return RagDocumentDetailResponse.model_validate(doc)

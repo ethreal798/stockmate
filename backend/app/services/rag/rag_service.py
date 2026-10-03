@@ -11,6 +11,19 @@ from app.services.llm_service import LLMService
 from app.services.rag.retrieval_service import RetrievalService
 
 
+# excerpt 最大字符数（前端 tooltip 和卡片列表都够用）
+_EXCERPT_MAX_CHARS = 50
+
+
+def _make_excerpt(content: str | None, max_chars: int = _EXCERPT_MAX_CHARS) -> str | None:
+    """截取 content 前 max_chars 字作为 excerpt，超过时末尾加 ..."""
+    if not content:
+        return None
+    if len(content) <= max_chars:
+        return content
+    return content[:max_chars].rstrip() + "..."
+
+
 class RagService:
     """检索增强问答编排服务。"""
 
@@ -40,7 +53,7 @@ class RagService:
             days=days,
         )
         retrieved_items = retrieval["items"]
-        # 3. 提取检索结果引用 去掉正文
+        # 3. 提取检索结果引用
         citations = self._build_citations(retrieved_items)
 
         if not retrieved_items:
@@ -115,7 +128,11 @@ class RagService:
 
     @staticmethod
     def _build_citations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """从完整检索结果里剥掉 chunk 正文，只留来源/链接/分数等元信息 ——给前端展示引用来源 + 给后端审计留快照。"""
+        """从完整检索结果里提取前端展示需要的引用信息。
+
+        document_url 放在 RagDocument.extra_metadata 里，前端通过 document_id
+        调 GET /ai/rag/documents/{document_id} 按需获取，不塞进 citation。
+        """
         citations: list[dict[str, Any]] = []
         for index, item in enumerate(items, start=1):
             published_at = item.get("published_at")
@@ -124,12 +141,12 @@ class RagService:
                     "index": index,
                     "chunk_id": item["chunk_id"],
                     "document_id": item["document_id"],
-                    "title": item.get("title"),
+                    "title": item.get("title"),  # title应该在 RagDocument.extra_metadata 里 测试时检查一下
                     "source_name": item.get("source_name"),
-                    "url": item.get("url"),
                     "published_at": published_at.isoformat() if published_at else None,
                     "score": item.get("score"),
                     "match_type": item.get("match_type"),
+                    "excerpt": _make_excerpt(item.get("content")),
                 }
             )
         return citations
