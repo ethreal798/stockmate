@@ -152,8 +152,6 @@ class ChunkService:
             source_name=document.source_name,
             extra_metadata={
                 "document_title": document.title,
-                "source_type": document.source_type,
-                "source_id": document.source_id,
             },
         )
 
