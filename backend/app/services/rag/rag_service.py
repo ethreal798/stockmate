@@ -96,17 +96,18 @@ class RagService:
             "你是一个中文金融资讯 RAG 助手。请只基于用户提供的检索资料回答，不要编造未出现的事实。"
             "回答需要清晰、克制，并区分事实、推断和不确定性。"
             "这不是投资建议，不要给出确定性的买卖指令。"
-            "如资料不足，请直接说明资料不足。"
+            "如资料不足，请直接说明资料不足。\n\n"
+            "资料以'资料 N:'开头，你在回答中引用时必须在对应的观点末尾标注编号 [1] [2] [3]...，"
+            "资料编号和引用编号必须一一对应。所有事实性陈述都必须标注编号。"
         )
         user_prompt = (
             f"用户问题：{question}\n\n"
             f"检索资料：\n{context}\n\n"
-            "请按以下结构回答：\n"
+            "请按以下结构回答，在每个关键依据和事实后面标注对应的资料编号：\n"
             "1. 结论\n"
-            "2. 关键依据\n"
+            "2. 关键依据（每条依据后标注 [N]）\n"
             "3. 可能影响\n"
             "4. 风险与不确定性\n"
-            "引用资料时请使用 [1]、[2] 这样的编号。"
         )
         return [
             {"role": "system", "content": system_prompt},
@@ -121,7 +122,7 @@ class RagService:
             title = item.get("title") or "无标题"
             source_name = item.get("source_name") or "未知来源"
             lines.append(
-                f"[{index}] 来源：{source_name}；时间：{published_at}；标题：{title}；"
+                f"资料 {index}: 来源：{source_name}；时间：{published_at}；标题：{title}；"
                 f"分类：{item.get('category') or '未知'}；内容：{item['content']}"
             )
         return "\n".join(lines)
