@@ -7,4 +7,3 @@ __pycache__
 .mypy_cache
 .ruff_cache
 .env
-go_stock.db
