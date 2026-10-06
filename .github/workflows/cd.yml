@@ -123,13 +123,10 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           command_timeout: 10m
           script: |
+            # 严格模式：出错就停、未定义变量报错、管道任一环失败即失败
             set -Eeuo pipefail
 
-            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
-            if [ -z "$DEPLOY_PATH" ]; then
-              DEPLOY_PATH="/opt/stockmate"
-            fi
-
+            DEPLOY_PATH="/opt/stockmate"
             cd "$DEPLOY_PATH"
 
             if [ ! -f .env ]; then
@@ -138,12 +135,15 @@ jobs:
               exit 1
             fi
 
-            export BACKEND_IMAGE="ghcr.io/${{ github.repository }}-backend:${{ env.RELEASE_TAG }}"
-            export FRONTEND_IMAGE="ghcr.io/${{ github.repository }}-frontend:${{ env.RELEASE_TAG }}"
-            export POSTGRES_IMAGE="ghcr.io/${{ github.repository }}-postgres:${{ env.RELEASE_TAG }}"
+            # 部署镜像标签
+            BACKEND_IMAGE="ghcr.io/${{ github.repository }}-backend:${{ env.RELEASE_TAG }}"
+            FRONTEND_IMAGE="ghcr.io/${{ github.repository }}-frontend:${{ env.RELEASE_TAG }}"
+            POSTGRES_IMAGE="ghcr.io/${{ github.repository }}-postgres:${{ env.RELEASE_TAG }}"
 
+            # 只有文件所有者能读写，同机器上其他人读不了环境变量
             chmod 600 .env
 
+            # 把`.env` 文件里某个变量的值改掉 。有就替换，没有就追加一行 这里目的是更新构建后的镜像标签 让compose拉取正确的镜像
             set_env_var() {
               KEY="$1"
               VALUE="$2"
@@ -159,6 +159,7 @@ jobs:
             set_env_var "FRONTEND_IMAGE" "$FRONTEND_IMAGE"
             set_env_var "POSTGRES_IMAGE" "$POSTGRES_IMAGE"
 
+            # 给`docker compose` 这个长命令起个别名 ，以后只写`compose` 就行
             compose() {
               docker compose \
                 --env-file .env \
@@ -171,9 +172,6 @@ jobs:
 
               echo "部署失败，退出代码：${EXIT_CODE}"
 
-              echo "输出 Compose 配置检查结果..."
-              compose config --quiet || true
-
               echo "输出容器状态..."
               compose ps || true
 
@@ -184,10 +182,8 @@ jobs:
               exit "$EXIT_CODE"
             }
 
+            # 只要有命令执行失败，就自动调用`diagnostics` 这个函数。
             trap diagnostics ERR
-
-            echo "检查 Docker Compose..."
-            docker compose version
 
             echo "检查部署配置..."
             if ! compose config --quiet; then
@@ -210,42 +206,27 @@ jobs:
               agent-worker \
               scheduler-worker \
               frontend \
-              postgres
+              postgres \
+              redis \
+              nginx
 
-            # 第一步：确认 PostgreSQL 仍然可用，避免迁移打到不可用数据库。
-            echo "检查 PostgreSQL 就绪状态..."
-            POSTGRES_READY=0
+            echo "启动基础设施容器（PostgreSQL + Redis）..."
+            timeout 2m docker compose \
+              --env-file .env \
+              -f docker-compose.prod.yml \
+              up -d \
+              postgres \
+              redis
 
-            for i in $(seq 1 30); do
-              if compose exec -T postgres sh -c \
-                'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-                >/dev/null 2>&1; then
-                POSTGRES_READY=1
-                break
-              fi
-
-              echo "PostgreSQL 尚未就绪，等待 5 秒（${i}/30）..."
-              sleep 5
-            done
-
-            if [ "$POSTGRES_READY" != "1" ]; then
-              echo "PostgreSQL 未能在规定时间内就绪"
-              exit 1
-            fi
-
-            # 第二步：使用一次性后端容器执行迁移。
-            # 此时正式后端服务尚未启动，因此不会因为缺少数据表而启动失败。
-            echo "执行数据库迁移..."
+            echo "启动后端容器并执行数据库迁移..."
             timeout 3m docker compose \
               --env-file .env \
               -f docker-compose.prod.yml \
               run \
               --rm \
-              --no-deps \
               backend \
               alembic upgrade head
 
-            # 第三步：迁移成功后只更新业务服务。
             echo "更新业务服务..."
             timeout 3m docker compose \
               --env-file .env \
@@ -260,35 +241,21 @@ jobs:
               frontend \
               nginx
 
+            # 平滑重载
             echo "Restarting Nginx to refresh upstream container addresses..."
-            compose restart nginx
-
-            echo "等待后端容器运行..."
-            BACKEND_READY=0
-
-            for i in $(seq 1 30); do
-              if [ -n "$(compose ps --status running -q backend)" ]; then
-                BACKEND_READY=1
-                break
-              fi
-
-              echo "后端尚未运行，等待 5 秒（${i}/30）..."
-              sleep 5
-            done
-
-            if [ "$BACKEND_READY" != "1" ]; then
-              echo "后端容器未能正常运行"
-              exit 1
-            fi
+            compose exec -T nginx nginx -s reload
 
             echo "等待应用健康检查..."
             HEALTHY=0
 
+            # --resolve 把域名指向本机：既走真实 HTTPS 链路，又真实校验证书（SNI=stockmate.top），
+            # 证书过期/配错会直接失败，比 -k 跳过校验更能提前暴露问题。
             for i in $(seq 1 30); do
               if curl \
                 -fsS \
+                --resolve stockmate.top:443:127.0.0.1 \
                 --max-time 5 \
-                http://localhost/health \
+                https://stockmate.top/health \
                 >/dev/null; then
                 HEALTHY=1
                 break
@@ -299,7 +266,7 @@ jobs:
             done
 
             if [ "$HEALTHY" != "1" ]; then
-              echo "应用健康检查失败"
+              echo "应用健康检查失败——请检查上方的容器状态和日志输出"
               exit 1
             fi
 
