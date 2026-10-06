@@ -207,8 +207,6 @@ jobs:
               scheduler-worker \
               frontend \
               postgres \
-              redis \
-              nginx
 
             echo "启动基础设施容器（PostgreSQL + Redis）..."
             timeout 2m docker compose \
