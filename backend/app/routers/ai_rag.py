@@ -29,7 +29,6 @@ from app.schemas.rag import (
 from app.services.rag.chunk_service import ChunkService
 from app.services.rag.embedding_service import EmbeddingService
 from app.services.rag.event_extractor import EventExtractorService
-from app.services.rag.market_analysis_service import MarketAnalysisService
 from app.services.rag.news_ingest_service import NewsIngestService
 from app.services.rag.rag_pipeline_service import RagPipelineService
 from app.services.rag.rag_service import RagService
