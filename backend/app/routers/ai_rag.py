@@ -29,7 +29,6 @@ from app.schemas.rag import (
 from app.services.rag.chunk_service import ChunkService
 from app.services.rag.embedding_service import EmbeddingService
 from app.services.rag.event_extractor import EventExtractorService
-from app.services.rag.market_analysis_service import MarketAnalysisService
 from app.services.rag.news_ingest_service import NewsIngestService
 from app.services.rag.rag_pipeline_service import RagPipelineService
 from app.services.rag.rag_service import RagService
@@ -60,10 +59,6 @@ def get_rag_service(db: AsyncSession = Depends(get_db)) -> RagService:
 
 def get_rag_pipeline_service(db: AsyncSession = Depends(get_db)) -> RagPipelineService:
     return RagPipelineService(db)
-
-
-def get_market_analysis_service(db: AsyncSession = Depends(get_db)) -> MarketAnalysisService:
-    return MarketAnalysisService(db)
 
 
 def get_event_extractor_service(db: AsyncSession = Depends(get_db)) -> EventExtractorService:
