@@ -61,10 +61,6 @@ def get_rag_pipeline_service(db: AsyncSession = Depends(get_db)) -> RagPipelineS
     return RagPipelineService(db)
 
 
-def get_market_analysis_service(db: AsyncSession = Depends(get_db)) -> MarketAnalysisService:
-    return MarketAnalysisService(db)
-
-
 def get_event_extractor_service(db: AsyncSession = Depends(get_db)) -> EventExtractorService:
     return EventExtractorService(db)
 
