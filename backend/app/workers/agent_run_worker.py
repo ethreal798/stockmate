@@ -13,7 +13,6 @@ import os
 import socket
 import sys
 import time
-from typing import Any
 from uuid import UUID
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -56,14 +55,13 @@ class AgentRunWorker:
             await checkpointer.setup()
             logger.info(
                 "Agent worker started: worker_id=%s, checkpoint_url=%s",
-                self.worker_id, checkpoint_url,
+                self.worker_id,
+                checkpoint_url,
             )
             last_reap_at = time.monotonic()
             idle_ticks = 0
             while not self._stopping:
-                if time.monotonic() - last_reap_at >= min(
-                    settings.AGENT_RUN_LEASE_SECONDS / 2, 30
-                ):
+                if time.monotonic() - last_reap_at >= min(settings.AGENT_RUN_LEASE_SECONDS / 2, 30):
                     await self.repository.interrupt_stale_runs()
                     last_reap_at = time.monotonic()
 
@@ -71,9 +69,7 @@ class AgentRunWorker:
                 if run_id is None:
                     idle_ticks += 1
                     if idle_ticks % 20 == 0:
-                        logger.debug(
-                            "Agent worker idle: no pending runs (tick=%d)", idle_ticks
-                        )
+                        logger.debug("Agent worker idle: no pending runs (tick=%d)", idle_ticks)
                     await asyncio.sleep(settings.AGENT_RUN_POLL_SECONDS)
                     continue
 
@@ -100,10 +96,7 @@ class AgentRunWorker:
     def _checkpoint_url() -> str:
         """把 SQLAlchemy PostgreSQL URL 转换为 psycopg 可识别的连接串。"""
         url = settings.LANGGRAPH_DATABASE_URL or settings.DATABASE_URL
-        return (
-            url.replace("postgresql+asyncpg://", "postgresql://")
-            .replace("postgresql+psycopg2://", "postgresql://")
-        )
+        return url.replace("postgresql+asyncpg://", "postgresql://").replace("postgresql+psycopg2://", "postgresql://")
 
 
 async def main() -> None:

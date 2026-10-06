@@ -10,7 +10,6 @@ from app.models.rag import RagQueryLog
 from app.services.llm_service import LLMService
 from app.services.rag.retrieval_service import RetrievalService
 
-
 # excerpt 最大字符数（前端 tooltip 和卡片列表都够用）
 _EXCERPT_MAX_CHARS = 50
 

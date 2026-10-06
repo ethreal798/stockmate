@@ -14,7 +14,6 @@ from app.services.agent.state import AgentState
 logger = logging.getLogger(__name__)
 
 
-
 def build_general_chat_graph(
     *,
     llm: BaseChatModel,
@@ -45,16 +44,16 @@ def build_tool_chat_graph(
 ):
     """支持工具调用的 Agent 图（ReAct 循环）。
 
-        图结构：
-            START → agent ──→ should_continue ──┬─(达到上限或无 tool_calls) → END
-                                               └─(有 tool_calls) → increment_count → tools → agent → ...
+    图结构：
+        START → agent ──→ should_continue ──┬─(达到上限或无 tool_calls) → END
+                                           └─(有 tool_calls) → increment_count → tools → agent → ...
 
-        关键要点：
-        1. llm.bind_tools() 让模型输出 tool_calls
-        2. ToolNode 内置 handle_tool_errors=True：工具炸了自动包成 ToolMessage 返回给模型
-        3. increment_count 独立节点：工具执行前 +1，职责单一
-        4. should_continue 优先级：先查 tool_call_count 是否 ≥ max（熔断），再看 tool_calls（正常结束）
-        5. 并行工具调用：tool_calls 是列表时一轮里调多个，但只算 1 次计数（防死循环语义是「轮次」不是「单次调用」）
+    关键要点：
+    1. llm.bind_tools() 让模型输出 tool_calls
+    2. ToolNode 内置 handle_tool_errors=True：工具炸了自动包成 ToolMessage 返回给模型
+    3. increment_count 独立节点：工具执行前 +1，职责单一
+    4. should_continue 优先级：先查 tool_call_count 是否 ≥ max（熔断），再看 tool_calls（正常结束）
+    5. 并行工具调用：tool_calls 是列表时一轮里调多个，但只算 1 次计数（防死循环语义是「轮次」不是「单次调用」）
     """
     llm_with_tools = llm.bind_tools(tools)
 
@@ -67,7 +66,8 @@ def build_tool_chat_graph(
         if tool_calls:
             logger.info(
                 "[agent_node] LLM 输出 %d 个 tool_calls (轮次=%d): %s",
-                len(tool_calls), state.get("tool_call_count", 0),
+                len(tool_calls),
+                state.get("tool_call_count", 0),
                 [(tc["name"], tc.get("args")) for tc in tool_calls],
             )
 
@@ -88,7 +88,9 @@ def build_tool_chat_graph(
             if is_error:
                 logger.warning(
                     "[tools] ✗ 工具报错: %s, 返回长度=%d, 错误=%s",
-                    tool_name, content_len, (result.content or "")[:200],
+                    tool_name,
+                    content_len,
+                    (result.content or "")[:200],
                 )
             else:
                 logger.info("[tools] ✓ 完成: %s, 返回长度=%d", tool_name, content_len)
@@ -110,7 +112,7 @@ def build_tool_chat_graph(
         handle_tool_errors=True,
         awrap_tool_call=_tool_logger,
     )
-    
+
     def increment_tool_count(state: AgentState) -> dict:
         current = state.get("tool_call_count", 0)
         return {"tool_call_count": current + 1}

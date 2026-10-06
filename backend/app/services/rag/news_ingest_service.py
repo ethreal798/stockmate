@@ -1,6 +1,5 @@
 """统一资讯主表进入 RAG 文档表的服务。"""
 
-import hashlib
 from datetime import timezone
 from typing import Any
 

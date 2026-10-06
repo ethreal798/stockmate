@@ -6,7 +6,6 @@ Worker 和 Executor 都通过这个类操作 AgentRun。
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -32,9 +31,7 @@ class AgentRunRepository:
     # 进度快照（周期性调用，刷新租约 + 写 partial content）
     # ------------------------------------------------------------------
 
-    async def save_progress(
-        self, run_id: UUID, content: str, last_event_id: str | None
-    ) -> bool:
+    async def save_progress(self, run_id: UUID, content: str, last_event_id: str | None) -> bool:
         """保存部分回复、刷新 Worker 租约，并返回是否收到中断请求。
 
         Returns:
@@ -43,26 +40,16 @@ class AgentRunRepository:
         async with async_session_factory() as db:
             async with db.begin():
                 # 加行锁，确保在事务中读取到的是最新数据
-                run = (
-                    await db.execute(
-                        select(AgentRun).where(AgentRun.id == run_id).with_for_update()
-                    )
-                ).scalar_one()
+                run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id).with_for_update())).scalar_one()
                 # 1. 快照：把累积的回复存进 Run
                 run.content_snapshot = content
                 # 2. 存 SSE 游标（断线续传用）
                 run.last_event_id = last_event_id or run.last_event_id
                 # 3. 续租：声明"我还活着"
-                run.lease_expires_at = datetime.now() + timedelta(
-                    seconds=settings.AGENT_RUN_LEASE_SECONDS
-                )
+                run.lease_expires_at = datetime.now() + timedelta(seconds=settings.AGENT_RUN_LEASE_SECONDS)
                 # 4. 助手消息同步更新
                 message = (
-                    await db.execute(
-                        select(AgentMessage).where(
-                            AgentMessage.id == run.assistant_message_id
-                        )
-                    )
+                    await db.execute(select(AgentMessage).where(AgentMessage.id == run.assistant_message_id))
                 ).scalar_one()
                 message.content = content
                 # 5. 检查是否收到中断请求
@@ -91,11 +78,7 @@ class AgentRunRepository:
         """
         async with async_session_factory() as db:
             async with db.begin():
-                run = (
-                    await db.execute(
-                        select(AgentRun).where(AgentRun.id == run_id).with_for_update()
-                    )
-                ).scalar_one()
+                run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id).with_for_update())).scalar_one()
                 if run.status == "cancel_requested":
                     await self._apply_canceled(db, run, content, last_event_id)
                     return "canceled"
@@ -111,11 +94,7 @@ class AgentRunRepository:
                 run.finished_at = datetime.now()
                 run.lease_expires_at = None
                 message = (
-                    await db.execute(
-                        select(AgentMessage).where(
-                            AgentMessage.id == run.assistant_message_id
-                        )
-                    )
+                    await db.execute(select(AgentMessage).where(AgentMessage.id == run.assistant_message_id))
                 ).scalar_one()
                 message.content = content
                 message.status = "completed"
@@ -126,37 +105,21 @@ class AgentRunRepository:
                 message.total_tokens = total_tokens
                 message.citations = citations
                 thread = (
-                    await db.execute(
-                        select(AgentThread)
-                        .where(AgentThread.id == run.thread_id)
-                        .with_for_update()
-                    )
+                    await db.execute(select(AgentThread).where(AgentThread.id == run.thread_id).with_for_update())
                 ).scalar_one()
-                thread.total_input_tokens = (thread.total_input_tokens or 0) + (
-                    input_tokens or 0
-                )
-                thread.total_output_tokens = (thread.total_output_tokens or 0) + (
-                    output_tokens or 0
-                )
+                thread.total_input_tokens = (thread.total_input_tokens or 0) + (input_tokens or 0)
+                thread.total_output_tokens = (thread.total_output_tokens or 0) + (output_tokens or 0)
                 thread.last_message_at = datetime.now()
                 return "completed"
 
-    async def finish_canceled(
-        self, run_id: UUID, content: str, last_event_id: str | None
-    ) -> None:
+    async def finish_canceled(self, run_id: UUID, content: str, last_event_id: str | None) -> None:
         """持久化任务已取消状态。"""
         async with async_session_factory() as db:
             async with db.begin():
-                run = (
-                    await db.execute(
-                        select(AgentRun).where(AgentRun.id == run_id).with_for_update()
-                    )
-                ).scalar_one()
+                run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id).with_for_update())).scalar_one()
                 await self._apply_canceled(db, run, content, last_event_id)
 
-    async def _apply_canceled(
-        self, db, run: AgentRun, content: str, last_event_id: str | None
-    ) -> None:
+    async def _apply_canceled(self, db, run: AgentRun, content: str, last_event_id: str | None) -> None:
         """把取消状态同时应用到 Run 和助手消息。
 
         内部方法：被 finish_completed 和 finish_canceled 复用。
@@ -168,9 +131,7 @@ class AgentRunRepository:
         run.finished_at = datetime.now()
         run.lease_expires_at = None
         message = (
-            await db.execute(
-                select(AgentMessage).where(AgentMessage.id == run.assistant_message_id)
-            )
+            await db.execute(select(AgentMessage).where(AgentMessage.id == run.assistant_message_id))
         ).scalar_one()
         message.content = content
         message.status = "canceled"
@@ -187,9 +148,7 @@ class AgentRunRepository:
         async with async_session_factory() as db:
             async with db.begin():
                 run = (
-                    await db.execute(
-                        select(AgentRun).where(AgentRun.id == run_id).with_for_update()
-                    )
+                    await db.execute(select(AgentRun).where(AgentRun.id == run_id).with_for_update())
                 ).scalar_one_or_none()
                 if run is None or run.status in ("completed", "canceled"):
                     return
@@ -201,9 +160,7 @@ class AgentRunRepository:
                 run.finished_at = datetime.now()
                 run.lease_expires_at = None
                 message = (
-                    await db.execute(
-                        select(AgentMessage).where(AgentMessage.id == run.assistant_message_id)
-                    )
+                    await db.execute(select(AgentMessage).where(AgentMessage.id == run.assistant_message_id))
                 ).scalar_one()
                 message.content = content
                 message.status = "failed"
@@ -218,11 +175,7 @@ class AgentRunRepository:
         """保存终态事件 ID，供 SSE 重连时建立游标。"""
         async with async_session_factory() as db:
             async with db.begin():
-                await db.execute(
-                    update(AgentRun)
-                    .where(AgentRun.id == run_id)
-                    .values(last_event_id=event_id)
-                )
+                await db.execute(update(AgentRun).where(AgentRun.id == run_id).values(last_event_id=event_id))
 
     # ------------------------------------------------------------------
     # 租约收割
@@ -253,11 +206,7 @@ class AgentRunRepository:
                     run.finished_at = now
                     run.lease_expires_at = None
                     message = (
-                        await db.execute(
-                            select(AgentMessage).where(
-                                AgentMessage.id == run.assistant_message_id
-                            )
-                        )
+                        await db.execute(select(AgentMessage).where(AgentMessage.id == run.assistant_message_id))
                     ).scalar_one()
                     message.status = "failed"
                     message.error_message = run.error_message

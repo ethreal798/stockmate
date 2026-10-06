@@ -68,12 +68,6 @@ def downgrade() -> None:
     )
 
     # 再加回索引
-    op.create_index(
-        op.f("ix_rag_documents_category"), "rag_documents", ["category"], unique=False
-    )
-    op.create_index(
-        op.f("ix_rag_documents_sentiment"), "rag_documents", ["sentiment"], unique=False
-    )
-    op.create_index(
-        op.f("ix_rag_documents_content_hash"), "rag_documents", ["content_hash"], unique=False
-    )
+    op.create_index(op.f("ix_rag_documents_category"), "rag_documents", ["category"], unique=False)
+    op.create_index(op.f("ix_rag_documents_sentiment"), "rag_documents", ["sentiment"], unique=False)
+    op.create_index(op.f("ix_rag_documents_content_hash"), "rag_documents", ["content_hash"], unique=False)

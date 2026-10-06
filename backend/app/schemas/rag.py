@@ -1,7 +1,7 @@
 """RAG 相关 Pydantic Schema。"""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -243,8 +243,6 @@ class RagEventExtractResponse(BaseModel):
 # ──────────────────────────────────────────────────────────────
 # Stage 4：功能一（行业趋势分析）
 # ──────────────────────────────────────────────────────────────
-
-from typing import Any, Literal
 
 
 class IndustryTrendRequest(BaseModel):

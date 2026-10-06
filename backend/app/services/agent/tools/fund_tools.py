@@ -74,10 +74,11 @@ async def _do_get_fund_detail(code: str, ctx: ToolContext) -> str:
 
 def create_fund_tools(context: ToolContext) -> list[StructuredTool]:
     """创建基金工具实例，把 context 绑到闭包里。
-        注：LangGraph ToolNode 会同步执行 tool.invoke()。
-        但我们的工具内部要调 async db，所以用 asyncio.run_coroutine_threadsafe
-        或者（更简单）让 ToolNode 在创建时指定 coroutine_mode。
+    注：LangGraph ToolNode 会同步执行 tool.invoke()。
+    但我们的工具内部要调 async db，所以用 asyncio.run_coroutine_threadsafe
+    或者（更简单）让 ToolNode 在创建时指定 coroutine_mode。
     """
+
     async def _search_funds_async(keyword: str, limit: int = 5) -> str:
         return await _do_search_funds(keyword, limit, context)
 
@@ -93,7 +94,7 @@ def create_fund_tools(context: ToolContext) -> list[StructuredTool]:
                 "或者需要根据关键词查找基金代码时使用此工具。"
                 "不要在用户已明确给出基金代码时调用搜索，应直接用 get_fund_detail 查询详情。"
             ),
-            args_schema=SearchFundsInput
+            args_schema=SearchFundsInput,
         ),
         StructuredTool.from_function(
             coroutine=_get_fund_detail_async,
@@ -104,5 +105,5 @@ def create_fund_tools(context: ToolContext) -> list[StructuredTool]:
                 "需要先通过 search_funds 搜索拿到基金代码，再用此工具查详情。"
             ),
             args_schema=GetFundDetailInput,
-        )
+        ),
     ]

@@ -60,7 +60,7 @@ class AgentRunExecutor:
         finish_reason: str | None = None
         last_event_id: str | None = None
         last_snapshot_at = time.monotonic()
-        
+
         # citations 收集（跨多轮 ReAct 调用持续累积，按 chunk_id 去重）
         collected_citations: list[dict] = []
         seen_chunk_ids: set[int] = set()
@@ -68,26 +68,16 @@ class AgentRunExecutor:
         try:
             # 1. 读任务元数据（只在任务开始时读一次，随后释放 DB 连接）
             async with async_session_factory() as db:
-                run = (
-                    await db.execute(select(AgentRun).where(AgentRun.id == run_id))
-                ).scalar_one()
+                run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id))).scalar_one()
                 user_message = (
-                    await db.execute(
-                        select(AgentMessage).where(AgentMessage.id == run.user_message_id)
-                    )
+                    await db.execute(select(AgentMessage).where(AgentMessage.id == run.user_message_id))
                 ).scalar_one()
-                model_config = await RuntimeModelConfigService(db).resolve(
-                    run.user_id, run.model_config_id
-                )
-                system_prompt = (
-                    await PromptTemplateService(db).get_general_chat_system_prompt()
-                )
+                model_config = await RuntimeModelConfigService(db).resolve(run.user_id, run.model_config_id)
+                system_prompt = await PromptTemplateService(db).get_general_chat_system_prompt()
 
             # 2. 组装 LangGraph 图（根据 capability 分流）
             llm = self.llm_factory.create_chat_model(model_config, streaming=True)
-            graph = self._build_graph(
-                run=run, llm=llm, system_prompt=system_prompt, checkpointer=checkpointer
-            )
+            graph = self._build_graph(run=run, llm=llm, system_prompt=system_prompt, checkpointer=checkpointer)
 
             config = {
                 "configurable": {
@@ -95,13 +85,15 @@ class AgentRunExecutor:
                     "run_id": str(run.id),
                 }
             }
-            await events.publish(
-                run_id, "metadata", {"run_id": str(run_id), "status": "running"}
-            )
+            await events.publish(run_id, "metadata", {"run_id": str(run_id), "status": "running"})
 
             logger.info(
                 "Executing graph: run_id=%s thread_id=%s user_id=%s model=%s msg_len=%d",
-                run_id, run.thread_id, run.user_id, model_config.model, len(user_message.content),
+                run_id,
+                run.thread_id,
+                run.user_id,
+                model_config.model,
+                len(user_message.content),
             )
 
             # 3. 流式执行 + 周期性快照
@@ -120,9 +112,7 @@ class AgentRunExecutor:
             ):
                 # 跳过内部 ToolMessage
                 if isinstance(chunk, ToolMessage):
-                    parsed = self._extract_citations_from_tool_content(
-                        getattr(chunk, "content", "")
-                    )
+                    parsed = self._extract_citations_from_tool_content(getattr(chunk, "content", ""))
                     if parsed:
                         for c in parsed:
                             cid = c.get("chunk_id")
@@ -131,15 +121,14 @@ class AgentRunExecutor:
                                 seen_chunk_ids.add(cid)
                                 logger.debug(
                                     "[executor] 收集 citation: chunk_id=%s title=%s",
-                                    cid, c.get("title"),
+                                    cid,
+                                    c.get("title"),
                                 )
                         # 重新编号：确保跨多次工具调用的 index 全局唯一（1..N）
                         for idx, c in enumerate(collected_citations, start=1):
                             c["index"] = idx
                         # 工具返回后立刻发 SSE citations 事件，前端可以在流式过程中拿到
-                        await events.publish(
-                            run_id, "citations", {"items": collected_citations}
-                        )
+                        await events.publish(run_id, "citations", {"items": collected_citations})
                     continue
 
                 # 解析 chunk 元数据（可能为空，因为不是最终帧）
@@ -148,37 +137,27 @@ class AgentRunExecutor:
                 if chunk_usage:
                     usage = dict(chunk_usage)
                 response_metadata = getattr(chunk, "response_metadata", None) or {}
-                finish_reason = (
-                    response_metadata.get("finish_reason") or finish_reason
-                )
+                finish_reason = response_metadata.get("finish_reason") or finish_reason
 
                 content = self._normalize_content(getattr(chunk, "content", ""))
                 if content:
                     content_parts.append(content)
-                    last_event_id = await events.publish(
-                        run_id, "delta", {"content": content}
-                    )
+                    last_event_id = await events.publish(run_id, "delta", {"content": content})
 
                 # 周期性快照 + 续租 + 感知取消请求
                 now = time.monotonic()
                 if now - last_snapshot_at >= settings.AGENT_SNAPSHOT_INTERVAL_SECONDS:
-                    canceled = await self.repository.save_progress(
-                        run_id, "".join(content_parts), last_event_id
-                    )
+                    canceled = await self.repository.save_progress(run_id, "".join(content_parts), last_event_id)
                     last_snapshot_at = now
                     if canceled:
                         logger.info("Run canceled via snapshot check: run_id=%s", run_id)
-                        await self.repository.finish_canceled(
-                            run_id, "".join(content_parts), last_event_id
-                        )
+                        await self.repository.finish_canceled(run_id, "".join(content_parts), last_event_id)
                         terminal_id = await events.publish(
                             run_id,
                             "aborted",
                             {"run_id": str(run_id), "status": "canceled"},
                         )
-                        await self.repository.store_terminal_event_id(
-                            run_id, terminal_id
-                        )
+                        await self.repository.store_terminal_event_id(run_id, terminal_id)
                         return
 
             # 4. 正常完成
@@ -196,8 +175,11 @@ class AgentRunExecutor:
             )
             logger.info(
                 "Run finished: run_id=%s status=%s finish_reason=%s model=%s usage=%s",
-                run_id, final_status, finish_reason or "stop",
-                model_name or model_config.model, usage,
+                run_id,
+                final_status,
+                finish_reason or "stop",
+                model_name or model_config.model,
+                usage,
             )
             terminal_event = "aborted" if final_status == "canceled" else "done"
             terminal_id = await events.publish(
@@ -215,7 +197,9 @@ class AgentRunExecutor:
             # 执行异常 → 持久化失败 + 发布 error 事件
             logger.exception("Agent run failed: run_id=%s", run_id)
             await self.repository.finish_failed(
-                run_id, "".join(content_parts), last_event_id,
+                run_id,
+                "".join(content_parts),
+                last_event_id,
                 str(exc) or "Agent run failed",
             )
             try:
@@ -230,9 +214,7 @@ class AgentRunExecutor:
                 )
                 await self.repository.store_terminal_event_id(run_id, event_id)
             except Exception:
-                logger.exception(
-                    "Failed to publish terminal error event: run_id=%s", run_id
-                )
+                logger.exception("Failed to publish terminal error event: run_id=%s", run_id)
 
     # ------------------------------------------------------------------
     # 内部：图组装
@@ -242,15 +224,11 @@ class AgentRunExecutor:
     def _build_graph(*, run, llm, system_prompt, checkpointer: BaseCheckpointSaver):
         """根据 run.capability 选对应图构建器。"""
         if run.capability == "general":
-            return build_general_chat_graph(
-                llm=llm, system_prompt=system_prompt, checkpointer=checkpointer
-            )
+            return build_general_chat_graph(llm=llm, system_prompt=system_prompt, checkpointer=checkpointer)
         # 带工具
         tool_ctx = ToolContext(user_id=run.user_id)
         tools = get_all_tools(tool_ctx)
-        return build_tool_chat_graph(
-            llm=llm, system_prompt=system_prompt, checkpointer=checkpointer, tools=tools
-        )
+        return build_tool_chat_graph(llm=llm, system_prompt=system_prompt, checkpointer=checkpointer, tools=tools)
 
     # ------------------------------------------------------------------
     # 流式 chunk 解析工具（留在 executor 内部，不单独文件）

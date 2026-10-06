@@ -17,11 +17,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -94,11 +94,7 @@ class EventExtractorService:
 
     async def _get_pending_documents(self, limit: int) -> list[RagDocument]:
         """取 processing_stage='embedded'（或 'event_failed' 可重试）的文档。"""
-        stmt = (
-            select(RagDocument)
-            .where(RagDocument.processing_stage.in_(["embedded", "event_failed"]))
-            .limit(limit)
-        )
+        stmt = select(RagDocument).where(RagDocument.processing_stage.in_(["embedded", "event_failed"])).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -180,10 +176,7 @@ class EventExtractorService:
         raw_entities = meta.get("entities") or []
 
         # subjects 锚点（纯字符串列表）
-        topics: list[str] = [
-            str(t).strip() for t in raw_topics
-            if t is not None and str(t).strip()
-        ]
+        topics: list[str] = [str(t).strip() for t in raw_topics if t is not None and str(t).strip()]
 
         # stock_list 锚点（只留 type=stock 且有 symbol 的）
         stocks: list[dict[str, str]] = []
@@ -255,7 +248,11 @@ class EventExtractorService:
             anchors_text += f"\n【已知行业锚点（来源财联社 subjects，仅供参考映射到 taxonomy）】\n{', '.join(topics)}\n"
         if stocks:
             stock_lines = [f"  - {s['symbol']}: {s['name']}" for s in stocks]
-            anchors_text += f"\n【已知股票锚点（来源财联社 stock_list，可直接作为 entity_code/entity_name）】\n" + "\n".join(stock_lines) + "\n"
+            anchors_text += (
+                "\n【已知股票锚点（来源财联社 stock_list，可直接作为 entity_code/entity_name）】\n"
+                + "\n".join(stock_lines)
+                + "\n"
+            )
 
         user_prompt = (
             f"今日日期：{today}\n\n"
@@ -263,9 +260,9 @@ class EventExtractorService:
             f"【新闻正文】\n{content}\n"
             f"{anchors_text}\n"
             f"请输出 JSON 格式（不要输出 Markdown 代码块标记），结构如下：\n"
-            f'{{\n'
+            f"{{\n"
             f'  "events": [\n'
-            f'    {{\n'
+            f"    {{\n"
             f'      "entity_type": "stock|industry|macro|...",\n'
             f'      "entity_name": "实体名称（如有锚点 stock_list，优先使用锚点名称）",\n'
             f'      "entity_code": "股票代码（如有锚点 stock_list，优先使用锚点 symbol；行业/宏观事件可留空）",\n'
@@ -274,9 +271,9 @@ class EventExtractorService:
             f'      "event_action": "事件核心描述，≤50字",\n'
             f'      "sentiment": "positive|negative|mixed|neutral",\n'
             f'      "confidence": 0.0-1.0\n'
-            f'    }}\n'
-            f'  ]\n'
-            f'}}\n'
+            f"    }}\n"
+            f"  ]\n"
+            f"}}\n"
         )
 
         return [
@@ -356,16 +353,18 @@ class EventExtractorService:
                 sentiment = None
 
             # 组装清洗后的事件
-            normalized.append({
-                "entity_type": str(evt.get("entity_type", "")).strip() or "industry",
-                "entity_name": str(evt.get("entity_name", "")).strip() or None,
-                "entity_code": str(evt.get("entity_code", "")).strip() or None,
-                "industry_category": str(evt.get("industry_category", "")).strip() or None,
-                "industry_tag": str(evt.get("industry_tag", "")).strip() or None,
-                "event_action": str(evt.get("event_action", "")).strip() or None,
-                "sentiment": sentiment,
-                "confidence": confidence,
-            })
+            normalized.append(
+                {
+                    "entity_type": str(evt.get("entity_type", "")).strip() or "industry",
+                    "entity_name": str(evt.get("entity_name", "")).strip() or None,
+                    "entity_code": str(evt.get("entity_code", "")).strip() or None,
+                    "industry_category": str(evt.get("industry_category", "")).strip() or None,
+                    "industry_tag": str(evt.get("industry_tag", "")).strip() or None,
+                    "event_action": str(evt.get("event_action", "")).strip() or None,
+                    "sentiment": sentiment,
+                    "confidence": confidence,
+                }
+            )
 
         return normalized
 
@@ -392,33 +391,37 @@ class EventExtractorService:
             # 每个 LLM 事件 × 每只股票 = 多行（共享 industry_category/event_action）
             for llm_evt in llm_events:
                 for stock in stocks:
-                    batch.append(RagEvent(
+                    batch.append(
+                        RagEvent(
+                            document_id=doc.id,
+                            entity_type="stock",
+                            entity_name=stock["name"],
+                            entity_code=stock["symbol"],
+                            industry_category=llm_evt.get("industry_category"),
+                            industry_tag=llm_evt.get("industry_tag"),
+                            event_action=llm_evt.get("event_action"),
+                            sentiment=llm_evt.get("sentiment"),
+                            confidence=llm_evt.get("confidence"),
+                            event_time=doc.published_at,
+                        )
+                    )
+        else:
+            # 情况 B：无 stock_list 锚点，直接用 LLM 推断结果
+            for llm_evt in llm_events:
+                batch.append(
+                    RagEvent(
                         document_id=doc.id,
-                        entity_type="stock",
-                        entity_name=stock["name"],
-                        entity_code=stock["symbol"],
+                        entity_type=llm_evt.get("entity_type", "industry"),
+                        entity_name=llm_evt.get("entity_name"),
+                        entity_code=llm_evt.get("entity_code"),
                         industry_category=llm_evt.get("industry_category"),
                         industry_tag=llm_evt.get("industry_tag"),
                         event_action=llm_evt.get("event_action"),
                         sentiment=llm_evt.get("sentiment"),
                         confidence=llm_evt.get("confidence"),
                         event_time=doc.published_at,
-                    ))
-        else:
-            # 情况 B：无 stock_list 锚点，直接用 LLM 推断结果
-            for llm_evt in llm_events:
-                batch.append(RagEvent(
-                    document_id=doc.id,
-                    entity_type=llm_evt.get("entity_type", "industry"),
-                    entity_name=llm_evt.get("entity_name"),
-                    entity_code=llm_evt.get("entity_code"),
-                    industry_category=llm_evt.get("industry_category"),
-                    industry_tag=llm_evt.get("industry_tag"),
-                    event_action=llm_evt.get("event_action"),
-                    sentiment=llm_evt.get("sentiment"),
-                    confidence=llm_evt.get("confidence"),
-                    event_time=doc.published_at,
-                ))
+                    )
+                )
 
         if not batch:
             return 0

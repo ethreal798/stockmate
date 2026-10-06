@@ -48,7 +48,14 @@ def downgrade() -> None:
     )
     op.add_column(
         "rag_chunks",
-        sa.Column("token_count", sa.Integer(), autoincrement=False, nullable=True, server_default=sa.text("0"), comment="估算 token 数"),
+        sa.Column(
+            "token_count",
+            sa.Integer(),
+            autoincrement=False,
+            nullable=True,
+            server_default=sa.text("0"),
+            comment="估算 token 数",
+        ),
     )
     op.add_column(
         "rag_chunks",
@@ -86,7 +93,9 @@ def downgrade() -> None:
     )
     op.add_column(
         "rag_events",
-        sa.Column("weight", sa.Float(), autoincrement=False, nullable=True, server_default=sa.text("0"), comment="实体权重"),
+        sa.Column(
+            "weight", sa.Float(), autoincrement=False, nullable=True, server_default=sa.text("0"), comment="实体权重"
+        ),
     )
     op.add_column(
         "rag_events",

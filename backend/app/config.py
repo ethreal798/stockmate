@@ -1,6 +1,7 @@
 """应用配置模块，使用 pydantic-settings 管理所有配置项。"""
 
-from typing import Literal, Optional
+from typing import ClassVar, Literal, Optional
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,8 +13,10 @@ class Settings(BaseSettings):
          不要依赖默认值，确保生产环境安全。
     """
 
+    ROOT_PATH: ClassVar[Path] = Path(__file__).resolve().parents[2] / ".env"
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ROOT_PATH),
         env_file_encoding="utf-8",
         case_sensitive=False,  # 环境变量大小写不敏感
         extra="ignore",  # 忽略 .env 中多余的变量
@@ -128,12 +131,16 @@ class Settings(BaseSettings):
     RAG_PIPELINE_EMBED_LIMIT: int = 100
 
     # ---- RAG 事件抽取配置（Stage 3） ----
-    RAG_EVENT_EXTRACTION_SWITCH: bool = True            # 总开关
-    RAG_EVENT_EXTRACTION_BATCH_SIZE: int = 100          # 批量 commit 大小
-    RAG_EVENT_EXTRACTION_CONCURRENCY: int = 10          # LLM 并发数（asyncio.Semaphore）
-    RAG_EVENT_EXTRACTION_LIMIT_PER_DRAIN: int = 50       # 每次 drain 最多处理的文档数（避免爆 LLM）
+    RAG_EVENT_EXTRACTION_SWITCH: bool = True  # 总开关
+    RAG_EVENT_EXTRACTION_BATCH_SIZE: int = 100  # 批量 commit 大小
+    RAG_EVENT_EXTRACTION_CONCURRENCY: int = 10  # LLM 并发数（asyncio.Semaphore）
+    RAG_EVENT_EXTRACTION_LIMIT_PER_DRAIN: int = 50  # 每次 drain 最多处理的文档数（避免爆 LLM）
     RAG_EVENT_EXTRACTION_LLM_MODEL: str = "qwen3.8-flash"
-    RAG_EVENT_EXTRACTION_MAX_EVENTS: int = 3             # 单文档最多抽取事件数（Prompt 约束）
+    RAG_EVENT_EXTRACTION_MAX_EVENTS: int = 3  # 单文档最多抽取事件数（Prompt 约束）
+
+    # ---- RAG Stage 4 聚合配置 ----
+    RAG_AGG_CONFIDENCE_MIN: float = 0.6  # 聚合时默认置信度下限（rag_events 过滤）
+    RAG_AGG_TOP_EVENTS_LIMIT: int = 3  # 聚合时返回的事件数量（Prompt 约束）
 
     # ---- 备用 AI 模型配置（Ollama / DeepSeek 等） ----
     AI_OLLAMA_BASE_URL: str = "http://localhost:11434"

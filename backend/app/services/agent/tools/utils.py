@@ -7,6 +7,7 @@
 - fund_tools.py：基金领域特定的格式化（字段选择、标签拼接）
 """
 
+
 def truncate_result(text: str, max_length: int = 2000) -> str:
     """截断过长的工具结果，避免撑爆 LLM 上下文窗口。
 

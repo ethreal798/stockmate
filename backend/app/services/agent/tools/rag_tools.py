@@ -37,7 +37,8 @@ def _extract_citations_from_tool_content(content: str) -> list[dict] | None:
     """
     match = re.search(
         rf"{re.escape(_CITATION_MARKER_OPEN)}(.*?){re.escape(_CITATION_MARKER_CLOSE)}",
-        content, re.DOTALL,
+        content,
+        re.DOTALL,
     )
     if not match:
         return None
@@ -52,7 +53,9 @@ def _strip_citations_marker(content: str) -> str:
     """把 <!--CITATIONS:...--> 标记从 ToolMessage.content 移除。"""
     return re.sub(
         rf"^\s*{re.escape(_CITATION_MARKER_OPEN)}.*?{re.escape(_CITATION_MARKER_CLOSE)}\s*$",
-        "", content, flags=re.DOTALL | re.MULTILINE,
+        "",
+        content,
+        flags=re.DOTALL | re.MULTILINE,
     ).rstrip()
 
 
@@ -66,9 +69,7 @@ async def _do_search_news(query: str, top_k: int, days: int, ctx: ToolContext) -
     """实际执行检索 → 格式化 → 拼接 citations 标记。"""
     # 自己租 session，用完即还（和 fund_tools 一致）
     async with async_session_factory() as db:
-        retrieval = await RetrievalService(db).retrieve(
-            query=query, top_k=top_k, days=days
-        )
+        retrieval = await RetrievalService(db).retrieve(query=query, top_k=top_k, days=days)
 
     items = retrieval["items"]
     if not items:
