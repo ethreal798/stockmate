@@ -1,5 +1,6 @@
 name: CD
 
+# 触发规则
 on:
   pull_request:
     branches:
@@ -31,25 +32,30 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.merged == true
 
+    # 每个矩阵实例各自跑在一个独立 runner 上 设置超时时间为 20 分钟
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # 矩阵策略：并行构建 backend、frontend、postgres 任一失败不影响其他构建
     strategy:
       fail-fast: false
       matrix:
         service:
           - backend
           - frontend
+          - postgres
 
     steps:
+      # 无论触发源是什么分支，都固定拉 dev/1.0 分支的代码。
       - name: Checkout production branch
         uses: actions/checkout@v4
         with:
           ref: dev/1.0
-
+      # 启用 BuildKit/Buildx，支持 cache-from / cache-to（GitHub Actions 缓存后端）以及多平台构建。
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 登录 GHCR
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -57,20 +63,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      # 构建并推送镜像
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
-          context: ./${{ matrix.service }}
-          file: ./${{ matrix.service }}/Dockerfile
+          # 构建上下文目录
+          context: ${{ matrix.service == 'postgres' && './backend' || format('./{0}', matrix.service) }}
+          # 用哪个 Dockerfile 构建镜像
+          file: ${{ matrix.service == 'postgres' && './backend/Dockerfile.pg' || format('./{0}/Dockerfile', matrix.service) }}
+          # 构建完直接推到仓库
           push: true
+          # 镜像双标签 ：release-${{ github.run_id }} 和 dev-1.0
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ env.RELEASE_TAG }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:dev-1.0
-          cache-from: type=gha,scope=go-stock-python-${{ matrix.service }}
-          cache-to: type=gha,mode=min,scope=go-stock-python-${{ matrix.service }},ignore-error=true
+          # `type=gha` 缓存到 GitHub Actions 自带的缓存服务 `scope=...` 防止覆盖其他服务的缓存
+          cache-from: type=gha,scope=${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          # `mode=min` 只缓存最近一次构建 ignore-error=true 缓存导出失败不算构建失败
+          cache-to: type=gha,mode=min,scope=${{ env.IMAGE_PREFIX }}-${{ matrix.service }},ignore-error=true
 
   deploy:
     name: Deploy to server
+    # 部署任务依赖 build 任务成功
     needs:
       - build
 
@@ -79,11 +93,13 @@ jobs:
     environment: production
 
     steps:
+      # 固定拉 dev/1.0 分支的代码。
       - name: Checkout production branch
         uses: actions/checkout@v4
         with:
           ref: dev/1.0
 
+      # 同步部署配置文件到服务器
       - name: Sync deployment configuration
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -91,9 +107,13 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          source: "docker-compose.prod.yml,nginx.conf"
-          target: "${{ secrets.DEPLOY_PATH || '/opt/go-stock-python' }}"
 
+          # 镜像里只有代码，没有"服务器的运行环境配置文件"，所以需要同步到服务器。
+          # 配置文件里包含了环境变量、数据库连接信息、Redis 连接信息等。
+          source: "docker-compose.prod.yml,nginx.conf"
+          target: "${{ secrets.DEPLOY_PATH || '/opt/stockmate' }}"
+
+      # 部署到服务器
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -107,7 +127,7 @@ jobs:
 
             DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
             if [ -z "$DEPLOY_PATH" ]; then
-              DEPLOY_PATH="/opt/go-stock-python"
+              DEPLOY_PATH="/opt/stockmate"
             fi
 
             cd "$DEPLOY_PATH"
@@ -120,6 +140,7 @@ jobs:
 
             export BACKEND_IMAGE="ghcr.io/${{ github.repository }}-backend:${{ env.RELEASE_TAG }}"
             export FRONTEND_IMAGE="ghcr.io/${{ github.repository }}-frontend:${{ env.RELEASE_TAG }}"
+            export POSTGRES_IMAGE="ghcr.io/${{ github.repository }}-postgres:${{ env.RELEASE_TAG }}"
 
             chmod 600 .env
 
@@ -136,6 +157,7 @@ jobs:
 
             set_env_var "BACKEND_IMAGE" "$BACKEND_IMAGE"
             set_env_var "FRONTEND_IMAGE" "$FRONTEND_IMAGE"
+            set_env_var "POSTGRES_IMAGE" "$POSTGRES_IMAGE"
 
             compose() {
               docker compose \
@@ -187,7 +209,8 @@ jobs:
               backend \
               agent-worker \
               scheduler-worker \
-              frontend
+              frontend \
+              postgres
 
             # 第一步：确认 PostgreSQL 仍然可用，避免迁移打到不可用数据库。
             echo "检查 PostgreSQL 就绪状态..."

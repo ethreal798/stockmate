@@ -154,3 +154,5 @@ media/
 /docs/
 /backend/tests/
 /outputs/
+/.trae/
+/.agent/

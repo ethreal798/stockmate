@@ -73,8 +73,6 @@ async def _run_rag_pipeline_drain(
             news_type=params.get("rag_news_type", "all"),
             relevant_only=params.get("rag_relevant_only", True),
             chunk_limit=params.get("rag_chunk_limit", settings.RAG_PIPELINE_CHUNK_LIMIT),
-            max_chars=params.get("rag_max_chars", settings.RAG_PIPELINE_MAX_CHARS),
-            overlap_chars=params.get("rag_overlap_chars", settings.RAG_PIPELINE_OVERLAP_CHARS),
             embed_limit=params.get("rag_embed_limit", settings.RAG_PIPELINE_EMBED_LIMIT),
             embedding_model=params.get("rag_embedding_model"),
         )

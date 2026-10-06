@@ -1,6 +1,7 @@
 """应用配置模块，使用 pydantic-settings 管理所有配置项。"""
 
-from typing import Literal, Optional
+from typing import ClassVar, Literal, Optional
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,18 +13,20 @@ class Settings(BaseSettings):
          不要依赖默认值，确保生产环境安全。
     """
 
+    ROOT_PATH: ClassVar[Path] = Path(__file__).resolve().parents[2] / ".env"
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ROOT_PATH),
         env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
+        case_sensitive=False,  # 环境变量大小写不敏感
+        extra="ignore",  # 忽略 .env 中多余的变量
     )
 
     # ---- 应用基本配置 ----
-    DEBUG: bool = False
+    DEBUG: bool = True
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    APP_NAME: str = "python-stock"
+    APP_NAME: str = "stockmate"
     APP_VERSION: str = "0.1.0"
     API_PREFIX: str = "/api/v1"
 
@@ -68,8 +71,16 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
     REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
 
+    # ---- CORS 配置 ----
+    # 从环境变量读取，按照格式编排：http://localhost:5173,http://localhost:3000
+    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+
+    @property
+    def CORS_ORIGINS(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS_STR.split(",") if origin.strip()]
+
     # ---- 数据库配置 ----
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/go_stock"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/stockmate"
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_ECHO: bool = False
@@ -96,12 +107,12 @@ class Settings(BaseSettings):
     AI_EMBEDDING_DIM: int = 1024
     AI_EMBEDDING_BATCH_SIZE: int = 10
     AI_EMBEDDING_REQUEST_DIMENSIONS: int = 1024
-    AI_EMBEDDING_TIMEOUT_SECONDS: int = 60
+    AI_EMBEDDING_TIMEOUT_SECONDS: int = 60  # 访问服务商embedding模型的超时时间
     AI_EMBEDDING_MAX_RETRIES: int = 3
-    AI_EMBEDDING_RETRY_BASE_SECONDS: float = 2.0
+    AI_EMBEDDING_RETRY_BASE_SECONDS: float = 2.0  # 重试时需要等待的时间 指数退避
 
     # ---- RAG 流水线配置 ----
-    RAG_PIPELINE_SWITCH: bool = False
+    RAG_PIPELINE_SWITCH: bool = True
     # 立刻执行RAG流水线当新增资讯新闻后
     RAG_PIPELINE_ON_NEWS_CRAWL: bool = True
     # RAG流水线最小间隔时间
@@ -118,10 +129,18 @@ class Settings(BaseSettings):
     RAG_PIPELINE_CHUNK_LIMIT: int = 100
     # 最大向量化数据量
     RAG_PIPELINE_EMBED_LIMIT: int = 100
-    # 最大字符数
-    RAG_PIPELINE_MAX_CHARS: int = 800
-    # 重叠字符数
-    RAG_PIPELINE_OVERLAP_CHARS: int = 120
+
+    # ---- RAG 事件抽取配置（Stage 3） ----
+    RAG_EVENT_EXTRACTION_SWITCH: bool = True  # 总开关
+    RAG_EVENT_EXTRACTION_BATCH_SIZE: int = 100  # 批量 commit 大小
+    RAG_EVENT_EXTRACTION_CONCURRENCY: int = 10  # LLM 并发数（asyncio.Semaphore）
+    RAG_EVENT_EXTRACTION_LIMIT_PER_DRAIN: int = 50  # 每次 drain 最多处理的文档数（避免爆 LLM）
+    RAG_EVENT_EXTRACTION_LLM_MODEL: str = "qwen3.8-flash"
+    RAG_EVENT_EXTRACTION_MAX_EVENTS: int = 3  # 单文档最多抽取事件数（Prompt 约束）
+
+    # ---- RAG Stage 4 聚合配置 ----
+    RAG_AGG_CONFIDENCE_MIN: float = 0.6  # 聚合时默认置信度下限（rag_events 过滤）
+    RAG_AGG_TOP_EVENTS_LIMIT: int = 3  # 聚合时返回的事件数量（Prompt 约束）
 
     # ---- 备用 AI 模型配置（Ollama / DeepSeek 等） ----
     AI_OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -145,14 +164,6 @@ class Settings(BaseSettings):
     AGENT_EVENT_STREAM_MAXLEN: int = 10000  # 每个Run最多保留的Redis事件数
     AGENT_STREAM_BLOCK_MS: int = 10000  # SSE读取Redis时的阻塞等待时间
     AGENT_SNAPSHOT_INTERVAL_SECONDS: float = 0.5  # 部分回答写入PostgreSQL的间隔
-
-    # ---- CORS 配置 ----
-    # 从环境变量读取，格式：http://localhost:5173,http://localhost:3000
-    CORS_ORIGINS_STR: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
-
-    @property
-    def CORS_ORIGINS(self) -> list[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS_STR.split(",") if origin.strip()]
 
     # ---- 定时任务配置 ----
     SCHEDULER_TIMEZONE: str = "Asia/Shanghai"

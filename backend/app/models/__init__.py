@@ -4,50 +4,17 @@ from app.core.database import Base
 
 from .base import TimestampMixin, SoftDeleteMixin, GormBaseModel
 from .user import User
-from .stock import (
-    FollowedStock,
-    StockBasic,
-    AllStockInfo,
-    StockInfoHK,
-    StockInfoUS,
-    StockGroup,
-    StockGroupItem,
-    StockInfo,
-    IndexBasic,
-    TradingRecord,
-    BKDict,
-)
 from .rag import (
     RagDocument,
     RagChunk,
     RagChunkEmbedding,
-    RagEntity,
+    RagEvent,
+    RagWeeklyReport,
     RagQueryLog,
 )
 from .news import NewsSource, NewsRawItem, NewsItem, NewsItemTopic, NewsItemEntity, NewsItemRelation
-from .market import (
-    MarketStatistic,
-    StockChangeHistory,
-    WordAnalyze,
-    SentimentResultAnalyze,
-    GlobalStockIndex,
-    LongTigerRankData,
-)
-from .system import (
-    Settings,
-    CronTask,
-    CronTaskExecutionLog,
-    MCPServer,
-    MCPServerTool,
-    Skill,
-    SkillConfig,
-    AiAssistantSession,
-    AIConfig,
-    VersionInfo,
-)
 from .settings import UserAIModelConfig
 from .agent import AgentMessage, AgentRun, AgentThread, PromptTemplate
-from .strategy import CustomStrategy
 from .fund import (
     Fund,
     FundWatchlistItem,
@@ -71,53 +38,24 @@ __all__ = [
     "FundPerformanceTrendLatest",
     # user
     "User",
-    # stock
-    "FollowedStock",
-    "StockBasic",
-    "AllStockInfo",
-    "StockInfoHK",
-    "StockInfoUS",
-    "StockGroup",
-    "StockGroupItem",
-    "StockInfo",
-    "IndexBasic",
-    "TradingRecord",
-    "BKDict",
-    # ai
-    "PromptTemplate",
+    "UserAIModelConfig",
+    # rag
     "RagDocument",
     "RagChunk",
     "RagChunkEmbedding",
-    "RagEntity",
+    "RagEvent",
+    "RagWeeklyReport",
     "RagQueryLog",
-    # market
+    # news
     "NewsSource",
     "NewsRawItem",
     "NewsItem",
     "NewsItemTopic",
     "NewsItemEntity",
     "NewsItemRelation",
-    "MarketStatistic",
-    "StockChangeHistory",
-    "WordAnalyze",
-    "SentimentResultAnalyze",
-    "GlobalStockIndex",
-    "LongTigerRankData",
-    # system
-    "Settings",
-    "CronTask",
-    "CronTaskExecutionLog",
-    "MCPServer",
-    "MCPServerTool",
-    "Skill",
-    "SkillConfig",
-    "AiAssistantSession",
-    "AIConfig",
-    "VersionInfo",
-    "UserAIModelConfig",
+    # agent
+    "PromptTemplate",
     "AgentThread",
     "AgentRun",
     "AgentMessage",
-    # strategy
-    "CustomStrategy",
 ]

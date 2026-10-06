@@ -1,5 +1,6 @@
 name: CI
 
+# 触发规则
 on:
   push:
     branches:
@@ -10,7 +11,7 @@ on:
       - dev/1.0
   workflow_dispatch:
 
-# 同一分支/PR 只保留最新一次 CI 运行，避免旧的成功检查残留误导分支保护门禁。
+# 同一分支/PR 只保留最新一次 CI 运行
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -21,9 +22,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. 检出代码：CI 服务器执行`git clone`，把仓库拉到自己本地的临时工作目录
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2. 设置 Python 环境
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -31,6 +34,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
 
+      # 3. 安装后端依赖
       - name: Install backend deps
         run: |
           cd backend
@@ -38,16 +42,19 @@ jobs:
           pip install -r requirements.txt
           pip install black flake8
 
+      # 4. 检查后端代码格式
       - name: Check Python format
         run: |
           cd backend
           black --check .
 
+      # 5. 检查后端代码 linting
       - name: Check Python lint
         run: |
           cd backend
           flake8 .
 
+      # 6. 设置 Node.js 环境
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -55,16 +62,19 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
+      # 7. 安装前端依赖
       - name: Install frontend deps
         run: |
           cd frontend
           npm ci
 
+      # 8. 检查前端代码 linting
       - name: Lint frontend
         run: |
           cd frontend
           npm run lint
 
+      # 9. 构建前端代码
       - name: Build frontend
         run: |
           cd frontend

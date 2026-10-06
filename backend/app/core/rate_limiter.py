@@ -44,7 +44,7 @@ def get_limiter() -> Limiter:
             storage_uri=settings.REDIS_URL,
             # 显式指定不存在的文件，阻止 slowapi 读取 .env
             # slowapi 默认会检查 .env 并以系统编码读取，
-            # 在中文 Windows 下可能因 gbk 编码无法解码 UTF-8 文件
+            # 在中文 Windows 下可能因 gbk 编码无法解码 UTF-8 文件导致报错终止程序
             config_filename=".slowapi_config",
         )
         logger.info("Rate limiter initialized with Redis backend")

@@ -1,6 +1,5 @@
 """统一资讯主表进入 RAG 文档表的服务。"""
 
-import hashlib
 from datetime import timezone
 from typing import Any
 
@@ -8,7 +7,7 @@ from sqlalchemy import Select, and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.news import NewsItem
+from app.models.news import NewsItem, NewsSource
 from app.models.rag import RagDocument
 
 
@@ -19,14 +18,19 @@ class NewsIngestService:
         self.db = db
 
     async def ingest_telegraphs(
-        self, limit: int = 100, news_type: str = "all", relevant_only: bool = True
+        self,
+        limit: int = 100,
+        news_type: str = "all",
+        source_code: str = "all",
     ) -> dict[str, int]:
-        """方法名保留 API 兼容；V1 没有相关性分析，relevant_only 暂不参与过滤。"""
-        del relevant_only
-        stmt = self._build_news_query(limit=limit, news_type=news_type)
+        """加载文档：支持指定数据类型及来源"""
+        # 1. 构建查询语句 详见 _build_news_query
+        stmt = self._build_news_query(limit=limit, news_type=news_type, source_code=source_code)
+        # 2. 执行查询 并去重
         result = await self.db.execute(stmt)
         news_items = list(result.scalars().unique().all())
 
+        # 3. 文档入库
         stats = {"scanned": len(news_items), "ingested": 0, "skipped_invalid": 0}
         for item in news_items:
             if not item.content or not item.content.strip():
@@ -35,26 +39,38 @@ class NewsIngestService:
             self.db.add(self._build_document(item))
             stats["ingested"] += 1
 
+        # 4. 完成一批后 直接提交事务。放在其他阶段错误 导致整体一起回滚
         if stats["ingested"]:
             await self.db.commit()
         return stats
 
     async def list_documents(self, limit: int = 20) -> list[RagDocument]:
+        """返回RAG文档库中的文档 按limit指定数量"""
         result = await self.db.execute(select(RagDocument).order_by(desc(RagDocument.created_at)).limit(limit))
         return list(result.scalars().all())
 
-    def _build_news_query(self, limit: int, news_type: str) -> Select[tuple[NewsItem]]:
+    @staticmethod
+    def _build_news_query(limit: int, news_type: str, source_code: str) -> Select[tuple[NewsItem]]:
+        # 1. 将资讯对应的关联信息一并构建 等待后续执行SQL查出对应数据
         stmt = select(NewsItem).options(
             selectinload(NewsItem.source),
             selectinload(NewsItem.topics),
             selectinload(NewsItem.entities),
             selectinload(NewsItem.relations),
         )
+        # 关联来源表
+        stmt = stmt.join(NewsSource)
 
+        # 2. 资讯题材过滤
         normalized_type = {"fast": "flash", "news": "article"}.get(news_type, news_type)
         if normalized_type != "all":
             stmt = stmt.where(NewsItem.content_type == normalized_type)
 
+        # 3. 来源过滤
+        if source_code != "all":
+            stmt = stmt.where(NewsSource.code == source_code)
+
+        # 4. 过滤已加载 根据文档表已有的来源id进行过滤 RagDocument.source_id == NewsItem.id
         existing_document = (
             select(RagDocument.source_id)
             .where(
@@ -72,29 +88,25 @@ class NewsIngestService:
         )
 
     def _build_document(self, item: NewsItem) -> RagDocument:
+        """文档入库：将资讯转换为RAG文档表格式"""
         content = item.content.strip()
 
         return RagDocument(
             source_type=item.content_type,
             source_id=item.id,
+            source_name=item.source.name,
             title=(item.title or "").strip() or None,
             content=content,
-            content_hash=self._hash_text(content),
             published_at=self._rag_datetime(item.published_at),
-            source_name=item.source.name,
-            url=self._original_document_url(item),
-            category=None,
-            importance_score=100 if item.is_source_important else 0,
-            sentiment=None,
-            language="zh",
             status="pending",
             extra_metadata=self._build_metadata(item),
         )
 
     @staticmethod
     def _build_metadata(item: NewsItem) -> dict[str, Any]:
+        """将资讯关联的数据打包进 extra_metadata 字段中。"""
+        document_url = item.relations[0].url if item.relations else None
         return {
-            "source_code": item.source.code,
             "is_source_important": bool(item.is_source_important),
             "topics": [topic.name for topic in item.topics],
             "entities": [
@@ -105,15 +117,8 @@ class NewsIngestService:
                 }
                 for entity in item.entities
             ],
+            "document_url": document_url,
         }
-
-    @staticmethod
-    def _hash_text(text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-    @staticmethod
-    def _original_document_url(item: NewsItem) -> str | None:
-        return next((relation.url for relation in item.relations if relation.url), None)
 
     @staticmethod
     def _rag_datetime(value):

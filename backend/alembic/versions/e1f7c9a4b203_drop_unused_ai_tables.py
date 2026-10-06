@@ -18,9 +18,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """删除没有业务引用的旧 AI 响应、推荐和聊天记忆表。"""
-    op.drop_table("chat_memory")
-    op.drop_table("ai_recommend_stocks")
-    op.drop_table("ai_response_result")
+    op.execute("DROP TABLE IF EXISTS chat_memory")
+    op.execute("DROP TABLE IF EXISTS ai_recommend_stocks")
+    op.execute("DROP TABLE IF EXISTS ai_response_result")
 
 
 def downgrade() -> None:

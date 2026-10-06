@@ -45,10 +45,6 @@ class LLMFactory:
         kwargs.update(explicit_params)
         return ChatOpenAI(**kwargs)
 
-    def create_chat_client(self, config: RuntimeModelConfig) -> BaseChatModel:
-        """兼容旧调用名称，行为与 create_chat_model 相同。"""
-        return self.create_chat_model(config)
-
     @staticmethod
     def _split_request_params(request_params: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         """区分 ChatOpenAI 显式参数与需要放入 model_kwargs 的扩展参数。"""

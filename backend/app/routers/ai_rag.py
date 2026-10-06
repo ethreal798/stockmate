@@ -1,18 +1,23 @@
 """AI RAG 路由。"""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.models.rag import RagDocument
 from app.schemas.rag import (
     RagChatRequest,
     RagChatResponse,
     RagChunkBatchResponse,
     RagChunkRequest,
     RagChunkResponse,
+    RagDocumentDetailResponse,
     RagDocumentResponse,
     RagEmbedRequest,
     RagEmbedResponse,
+    RagEventExtractRequest,
+    RagEventExtractResponse,
     RagNewsIngestRequest,
     RagNewsIngestResponse,
     RagNewsPipelineDrainRequest,
@@ -23,6 +28,8 @@ from app.schemas.rag import (
 )
 from app.services.rag.chunk_service import ChunkService
 from app.services.rag.embedding_service import EmbeddingService
+from app.services.rag.event_extractor import EventExtractorService
+from app.services.rag.market_analysis_service import MarketAnalysisService
 from app.services.rag.news_ingest_service import NewsIngestService
 from app.services.rag.rag_pipeline_service import RagPipelineService
 from app.services.rag.rag_service import RagService
@@ -55,6 +62,14 @@ def get_rag_pipeline_service(db: AsyncSession = Depends(get_db)) -> RagPipelineS
     return RagPipelineService(db)
 
 
+def get_market_analysis_service(db: AsyncSession = Depends(get_db)) -> MarketAnalysisService:
+    return MarketAnalysisService(db)
+
+
+def get_event_extractor_service(db: AsyncSession = Depends(get_db)) -> EventExtractorService:
+    return EventExtractorService(db)
+
+
 def build_pipeline_response(result: dict) -> RagNewsPipelineResponse:
     ingest = (
         RagNewsIngestResponse(success=result["failed_stage"] != "ingest", **result["ingest"])
@@ -66,6 +81,22 @@ def build_pipeline_response(result: dict) -> RagNewsPipelineResponse:
     )
     embed = RagEmbedResponse(success=result["failed_stage"] != "embed", **result["embed"]) if result["embed"] else None
 
+    # Stage3 事件抽取响应（降级场景 result["event"] 含 {"error": "..."}）
+    event = None
+    if result.get("event"):
+        raw_event = result["event"]
+        has_error = "error" in raw_event and raw_event.get("error")
+        event = RagEventExtractResponse(
+            success=not has_error,
+            scanned=raw_event.get("scanned", 0),
+            extracted=raw_event.get("extracted", 0),
+            skipped_r4=raw_event.get("skipped_r4", 0),
+            failed=raw_event.get("failed", 0),
+            saved_events_count=raw_event.get("saved_events_count", 0),
+            model=raw_event.get("model", "unknown"),
+            error=raw_event.get("error"),
+        )
+
     return RagNewsPipelineResponse(
         success=result["success"],
         failed_stage=result["failed_stage"],
@@ -73,6 +104,7 @@ def build_pipeline_response(result: dict) -> RagNewsPipelineResponse:
         ingest=ingest,
         chunk=chunk,
         embed=embed,
+        event=event,
     )
 
 
@@ -84,7 +116,7 @@ async def ingest_news(
     stats = await service.ingest_telegraphs(
         limit=request.limit,
         news_type=request.news_type,
-        relevant_only=request.relevant_only,
+        source_code=request.source_code,
     )
     return RagNewsIngestResponse(success=True, **stats)
 
@@ -105,8 +137,6 @@ async def chunk_documents(
 ) -> RagChunkBatchResponse:
     stats = await service.chunk_pending_documents(
         limit=request.limit,
-        max_chars=request.max_chars,
-        overlap_chars=request.overlap_chars,
     )
     return RagChunkBatchResponse(success=True, **stats)
 
@@ -129,6 +159,39 @@ async def embed_chunks(
     return RagEmbedResponse(success=True, **stats)
 
 
+@router.post("/event/extract", response_model=RagEventExtractResponse, summary="执行 RAG Stage 3 LLM 事件抽取")
+async def extract_events(
+    request: RagEventExtractRequest,
+    service: EventExtractorService = Depends(get_event_extractor_service),
+) -> RagEventExtractResponse:
+    """对 processing_stage='embedded' 的待处理文档执行 LLM 事件抽取。
+
+    独立接口，可在不跑完整 pipeline drain 的情况下单独触发 Stage 3。
+    也会处理之前 event_failed 的重试。
+    """
+    from app.config import settings
+
+    if not settings.RAG_EVENT_EXTRACTION_SWITCH:
+        return RagEventExtractResponse(
+            success=False,
+            model=settings.RAG_EVENT_EXTRACTION_LLM_MODEL,
+            error="RAG_EVENT_EXTRACTION_SWITCH 已关闭，请在 config.py 开启后重试",
+        )
+
+    stats = await service.extract_pending(limit=request.limit)
+    has_error = stats.get("error")
+    return RagEventExtractResponse(
+        success=not bool(has_error),
+        scanned=stats["scanned"],
+        extracted=stats["extracted"],
+        skipped_r4=stats["skipped_r4"],
+        failed=stats["failed"],
+        saved_events_count=stats["saved_events_count"],
+        model=stats["model"],
+        error=has_error,
+    )
+
+
 @router.post("/pipeline/news/drain", response_model=RagNewsPipelineDrainResponse, summary="受控排空新闻 RAG 流水线")
 async def run_news_pipeline_drain(
     request: RagNewsPipelineDrainRequest,
@@ -141,9 +204,8 @@ async def run_news_pipeline_drain(
         news_type=request.news_type,
         relevant_only=request.relevant_only,
         chunk_limit=request.chunk_limit,
-        max_chars=request.max_chars,
-        overlap_chars=request.overlap_chars,
         embed_limit=request.embed_limit,
+        event_limit=request.event_limit,
         embedding_model=request.embedding_model,
     )
 
@@ -167,8 +229,6 @@ async def retrieve_chunks(
         query=request.query,
         top_k=request.top_k,
         days=request.days,
-        model=request.model,
-        use_vector=request.use_vector,
     )
     return RagRetrieveResponse.model_validate(result)
 
@@ -184,7 +244,22 @@ async def chat(
         top_k=request.top_k,
         days=request.days,
         model=request.model,
-        embedding_model=request.embedding_model,
-        use_vector=request.use_vector,
     )
     return RagChatResponse.model_validate(result)
+
+
+@router.get(
+    "/documents/{document_id}",
+    response_model=RagDocumentDetailResponse,
+    summary="查询单个 RAG document 详情",
+    description="根据 document_id 返回文档全文，点击「查看原文」或 citation 卡片时按需加载。",
+)
+async def get_document_detail(
+    document_id: int = Path(..., ge=1, description="RAG document ID"),
+    db: AsyncSession = Depends(get_db),
+) -> RagDocumentDetailResponse:
+    result = await db.execute(select(RagDocument).where(RagDocument.id == document_id))
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"RAG document {document_id} 不存在")
+    return RagDocumentDetailResponse.model_validate(doc)

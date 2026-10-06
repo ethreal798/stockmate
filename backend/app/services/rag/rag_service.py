@@ -6,10 +6,21 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.rag import RagQueryLog
 from app.services.llm_service import LLMService
 from app.services.rag.retrieval_service import RetrievalService
+
+# excerpt 最大字符数（前端 tooltip 和卡片列表都够用）
+_EXCERPT_MAX_CHARS = 50
+
+
+def _make_excerpt(content: str | None, max_chars: int = _EXCERPT_MAX_CHARS) -> str | None:
+    """截取 content 前 max_chars 字作为 excerpt，超过时末尾加 ..."""
+    if not content:
+        return None
+    if len(content) <= max_chars:
+        return content
+    return content[:max_chars].rstrip() + "..."
 
 
 class RagService:
@@ -27,28 +38,28 @@ class RagService:
         top_k: int = 8,
         days: int | None = 7,
         model: str | None = None,
-        embedding_model: str | None = None,
-        use_vector: bool = True,
     ) -> dict[str, Any]:
         """执行 RAG 问答。"""
+        # 1. 准备初始必须变量
         start_time = time.perf_counter()
         conversation_id = conversation_id or str(uuid.uuid4())
-        model_name = model or settings.AI_MODEL_NAME
+        model_name = model  # or settings.AI_MODEL_NAME
 
+        # 2. 执行检索流程
         retrieval = await self.retrieval_service.retrieve(
             query=message,
             top_k=top_k,
             days=days,
-            model=embedding_model,
-            use_vector=use_vector,
         )
         retrieved_items = retrieval["items"]
+        # 3. 提取检索结果引用
         citations = self._build_citations(retrieved_items)
 
         if not retrieved_items:
             answer = "暂未检索到可用于回答的新闻资料。你可以扩大时间范围，或先执行新闻入库、切块和向量化任务。"
             usage = None
         else:
+            # 4. 组装提示词 调用大模型生成回复
             messages = self._build_messages(message, retrieved_items)
             llm_result = await self.llm_service.generate(messages=messages, model=model_name, temperature=0.2)
             answer = llm_result["content"]
@@ -78,41 +89,50 @@ class RagService:
         }
 
     def _build_messages(self, question: str, items: list[dict[str, Any]]) -> list[dict[str, str]]:
+        """组装检索结果与提示词 提问大模型"""
         context = self._build_context(items)
         system_prompt = (
             "你是一个中文金融资讯 RAG 助手。请只基于用户提供的检索资料回答，不要编造未出现的事实。"
             "回答需要清晰、克制，并区分事实、推断和不确定性。"
             "这不是投资建议，不要给出确定性的买卖指令。"
-            "如资料不足，请直接说明资料不足。"
+            "如资料不足，请直接说明资料不足。\n\n"
+            "资料以'资料 N:'开头，你在回答中引用时必须在对应的观点末尾标注编号 [1] [2] [3]...，"
+            "资料编号和引用编号必须一一对应。所有事实性陈述都必须标注编号。"
         )
         user_prompt = (
             f"用户问题：{question}\n\n"
             f"检索资料：\n{context}\n\n"
-            "请按以下结构回答：\n"
+            "请按以下结构回答，在每个关键依据和事实后面标注对应的资料编号：\n"
             "1. 结论\n"
-            "2. 关键依据\n"
+            "2. 关键依据（每条依据后标注 [N]）\n"
             "3. 可能影响\n"
             "4. 风险与不确定性\n"
-            "引用资料时请使用 [1]、[2] 这样的编号。"
         )
         return [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 
-    def _build_context(self, items: list[dict[str, Any]]) -> str:
+    @staticmethod
+    def _build_context(items: list[dict[str, Any]]) -> str:
         lines: list[str] = []
         for index, item in enumerate(items, start=1):
             published_at = item["published_at"].isoformat(sep=" ") if item.get("published_at") else "未知时间"
             title = item.get("title") or "无标题"
             source_name = item.get("source_name") or "未知来源"
             lines.append(
-                f"[{index}] 来源：{source_name}；时间：{published_at}；标题：{title}；"
+                f"资料 {index}: 来源：{source_name}；时间：{published_at}；标题：{title}；"
                 f"分类：{item.get('category') or '未知'}；内容：{item['content']}"
             )
         return "\n".join(lines)
 
-    def _build_citations(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    @staticmethod
+    def _build_citations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """从完整检索结果里提取前端展示需要的引用信息。
+
+        document_url 放在 RagDocument.extra_metadata 里，前端通过 document_id
+        调 GET /ai/rag/documents/{document_id} 按需获取，不塞进 citation。
+        """
         citations: list[dict[str, Any]] = []
         for index, item in enumerate(items, start=1):
             published_at = item.get("published_at")
@@ -121,12 +141,12 @@ class RagService:
                     "index": index,
                     "chunk_id": item["chunk_id"],
                     "document_id": item["document_id"],
-                    "title": item.get("title"),
+                    "title": item.get("title"),  # title应该在 RagDocument.extra_metadata 里 测试时检查一下
                     "source_name": item.get("source_name"),
-                    "url": item.get("url"),
                     "published_at": published_at.isoformat() if published_at else None,
                     "score": item.get("score"),
                     "match_type": item.get("match_type"),
+                    "excerpt": _make_excerpt(item.get("content")),
                 }
             )
         return citations

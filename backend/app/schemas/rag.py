@@ -1,7 +1,7 @@
 """RAG 相关 Pydantic Schema。"""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,16 +12,10 @@ class RagDocumentResponse(BaseModel):
     id: int
     source_type: str
     source_id: int
+    source_name: Optional[str] = None
     title: Optional[str] = None
     content: str
-    content_hash: str
     published_at: Optional[datetime] = None
-    source_name: Optional[str] = None
-    url: Optional[str] = None
-    category: Optional[str] = None
-    importance_score: int = 0
-    sentiment: Optional[str] = None
-    language: str = "zh"
     status: str = "pending"
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -36,15 +30,8 @@ class RagChunkResponse(BaseModel):
     document_id: int
     chunk_index: int
     chunk_text: str
-    chunk_hash: str
-    token_count: int = 0
-    start_offset: int = 0
-    end_offset: int = 0
     published_at: Optional[datetime] = None
     source_name: Optional[str] = None
-    category: Optional[str] = None
-    importance_score: int = 0
-    sentiment: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -56,7 +43,7 @@ class RagNewsIngestRequest(BaseModel):
 
     limit: int = Field(100, ge=1, le=1000, description="本次最多处理多少条新闻")
     news_type: str = Field("all", description="新闻类型: all / fast / news")
-    relevant_only: bool = Field(True, description="是否仅处理金融相关资讯")
+    source_code: str = Field("all", description="来源类型：all / cls")
 
 
 class RagNewsIngestResponse(BaseModel):
@@ -69,11 +56,9 @@ class RagNewsIngestResponse(BaseModel):
 
 
 class RagChunkRequest(BaseModel):
-    """RAG 文档切块请求。"""
+    """RAG 文档切块请求（FlashV1 策略，无需额外参数）。"""
 
     limit: int = Field(100, ge=1, le=1000, description="本次最多处理多少篇文档")
-    max_chars: int = Field(800, ge=200, le=4000, description="每个 chunk 最大字符数")
-    overlap_chars: int = Field(120, ge=0, le=1000, description="相邻 chunk 重叠字符数")
 
 
 class RagChunkBatchResponse(BaseModel):
@@ -83,7 +68,6 @@ class RagChunkBatchResponse(BaseModel):
     scanned: int = 0
     chunked_documents: int = 0
     chunks_created: int = 0
-    skipped_existing: int = 0
     skipped_invalid: int = 0
 
 
@@ -91,7 +75,7 @@ class RagEmbedRequest(BaseModel):
     """RAG chunk 向量化请求。"""
 
     limit: int = Field(100, ge=1, le=1000, description="本次最多处理多少个 chunk")
-    model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
+    # model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
 
 
 class RagEmbedResponse(BaseModel):
@@ -107,16 +91,15 @@ class RagEmbedResponse(BaseModel):
 
 
 class RagNewsPipelineRequest(BaseModel):
-    """新闻 RAG 一键流水线请求。"""
+    """新闻 RAG 一键流水线请求（FlashV1 切片，无需额外参数）。"""
 
     news_limit: int = Field(100, ge=1, le=1000, description="本次最多同步多少条新闻")
     news_type: str = Field("all", description="新闻类型: all / fast / news")
     relevant_only: bool = Field(True, description="是否仅处理金融相关资讯")
     chunk_limit: int = Field(100, ge=1, le=1000, description="本次最多切分多少篇文档")
-    max_chars: int = Field(800, ge=200, le=4000, description="每个 chunk 最大字符数")
-    overlap_chars: int = Field(120, ge=0, le=1000, description="相邻 chunk 重叠字符数")
     embed_limit: int = Field(100, ge=1, le=1000, description="本次最多向量化多少个 chunk")
-    embedding_model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
+    event_limit: Optional[int] = Field(None, ge=1, le=1000, description="本次最多抽取事件的文档数，None 走配置默认值")
+    # embedding_model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
 
 
 class RagNewsPipelineDrainRequest(RagNewsPipelineRequest):
@@ -135,6 +118,7 @@ class RagNewsPipelineResponse(BaseModel):
     ingest: Optional[RagNewsIngestResponse] = None
     chunk: Optional[RagChunkBatchResponse] = None
     embed: Optional[RagEmbedResponse] = None
+    event: Optional["RagEventExtractResponse"] = None
 
 
 class RagNewsPipelineDrainResponse(BaseModel):
@@ -155,8 +139,8 @@ class RagRetrieveRequest(BaseModel):
     query: str = Field(..., min_length=1, description="用户查询")
     top_k: int = Field(8, ge=1, le=50, description="返回 chunk 数量")
     days: Optional[int] = Field(7, ge=1, le=365, description="检索最近多少天的数据")
-    model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
-    use_vector: bool = Field(True, description="是否启用向量召回")
+    # model: Optional[str] = Field(None, description="Embedding 模型名称，默认使用配置项")
+    # use_vector: bool = Field(True, description="是否启用向量召回")
 
 
 class RagRetrieveItem(BaseModel):
@@ -168,10 +152,7 @@ class RagRetrieveItem(BaseModel):
     title: Optional[str] = None
     content: str
     source_name: Optional[str] = None
-    url: Optional[str] = None
     published_at: Optional[datetime] = None
-    category: Optional[str] = None
-    sentiment: Optional[str] = None
     score: float
     match_type: str
 
@@ -187,17 +168,36 @@ class RagRetrieveResponse(BaseModel):
 
 
 class RagCitation(BaseModel):
-    """RAG 回答引用来源。"""
+    """RAG 回答引用来源。
+
+    只有前端 hover 预览和底部卡片列表需要的轻量字段。
+    document_url 放在 RagDocument.extra_metadata，前端通过 document_id
+    调 GET /ai/rag/documents/{document_id} 按需获取。
+    """
 
     index: int
     chunk_id: int
     document_id: int
     title: Optional[str] = None
     source_name: Optional[str] = None
-    url: Optional[str] = None
     published_at: Optional[datetime] = None
     score: Optional[float] = None
     match_type: Optional[str] = None
+    excerpt: Optional[str] = None
+
+
+class RagDocumentDetailResponse(BaseModel):
+    """单 document 详情（点击「查看原文」或卡片时查询全文）。"""
+
+    id: int
+    source_type: str
+    source_name: Optional[str] = None
+    title: Optional[str] = None
+    content: str
+    published_at: Optional[datetime] = None
+    extra_metadata: Optional[dict] = None
+
+    model_config = {"from_attributes": True}
 
 
 class RagChatRequest(BaseModel):
@@ -208,8 +208,6 @@ class RagChatRequest(BaseModel):
     top_k: int = Field(8, ge=1, le=50, description="用于回答的召回 chunk 数")
     days: Optional[int] = Field(7, ge=1, le=365, description="检索最近多少天的数据")
     model: Optional[str] = Field(None, description="回答模型名称")
-    embedding_model: Optional[str] = Field(None, description="Embedding 模型名称")
-    use_vector: bool = Field(True, description="是否启用向量召回")
 
 
 class RagChatResponse(BaseModel):
@@ -221,3 +219,48 @@ class RagChatResponse(BaseModel):
     retrieved_count: int = 0
     model: str
     usage: Optional[dict] = None
+
+
+class RagEventExtractRequest(BaseModel):
+    """RAG 事件抽取请求（Stage 3）。"""
+
+    limit: Optional[int] = Field(None, ge=1, le=1000, description="本次最多抽取事件的文档数，None 走配置默认值")
+
+
+class RagEventExtractResponse(BaseModel):
+    """RAG 事件抽取响应。"""
+
+    success: bool = True
+    scanned: int = 0
+    extracted: int = 0
+    skipped_r4: int = 0
+    failed: int = 0
+    saved_events_count: int = 0
+    model: str
+    error: Optional[str] = None
+
+
+# ──────────────────────────────────────────────────────────────
+# Stage 4：功能一（行业趋势分析）
+# ──────────────────────────────────────────────────────────────
+
+
+class IndustryTrendRequest(BaseModel):
+    """行业趋势分析请求（功能一）。"""
+
+    time_range: Literal["1w", "1m", "3m", "6m"] = Field("1m", description="时间窗口：1周/1月/3月/6月")
+    llm_model: Optional[str] = Field(None, description="LLM 模型，None 用默认值")
+
+
+class IndustryTrendResponse(BaseModel):
+    """行业趋势分析响应。"""
+
+    time_range: str
+    start_time: str
+    end_time: str
+    model: Optional[str] = None
+    industries: list[dict[str, Any]]
+    global_sentiment: dict[str, Any]
+    top_events: list[dict[str, Any]]
+    analysis: str
+    citations: list[str] = []

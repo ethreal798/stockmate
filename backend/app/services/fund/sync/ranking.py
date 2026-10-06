@@ -58,7 +58,7 @@ class FundRankingSyncService:
         open_rows: list[dict[str, Any]],
         exchange_rows: list[dict[str, Any]],
         money_rows: list[dict[str, Any]],
-    ) -> dict[str, int]:
+    ):
         # 1. 收集所有基金代码，查询 Fund 表获取 fund_id 映射
         all_codes = sorted(
             set(
@@ -79,22 +79,9 @@ class FundRankingSyncService:
             money_rows = [r for r in money_rows if r["fund_code"] in fund_ids]
 
         # 2. 将各个类型排行榜数据进行入库
-        logger.info(
-            f"开始入库 open: {len(open_rows)} 条, exchange: {len(exchange_rows)} 条, money: {len(money_rows)} 条",
-        )
         await self._replace_latest(FundOpenRankLatest, open_rows, fund_ids)
         await self._replace_latest(FundExchangeRankLatest, exchange_rows, fund_ids)
         await self._replace_latest(FundMoneyRankLatest, money_rows, fund_ids)
-
-        # 3. 统计本次抓取结果
-        counts = {
-            "funds": len(fund_ids),
-            "open": len(open_rows),
-            "exchange": len(exchange_rows),
-            "money": len(money_rows),
-        }
-        logger.info("基金排行同步完成: %s", counts)
-        return counts
 
     async def _replace_latest(
         self,

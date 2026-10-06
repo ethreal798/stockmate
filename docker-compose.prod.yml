@@ -1,18 +1,18 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg15
-    pull_policy: never
+    image: ${POSTGRES_IMAGE}
+    command: postgres -c shared_preload_libraries=pg_textsearch,zhparser
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-go_stock}
+      POSTGRES_DB: ${POSTGRES_DB:-stockmate}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-go_stock}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-stockmate}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -83,7 +83,6 @@ services:
 
   redis:
     image: redis:alpine
-    pull_policy: never
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -98,7 +97,6 @@ services:
 
   nginx:
     image: nginx:alpine
-    pull_policy: never
     ports:
       - "80:80"
       - "443:443"

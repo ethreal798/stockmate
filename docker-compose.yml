@@ -1,19 +1,20 @@
-version: "3.9"
-
 services:
   postgres:
-    image: pgvector/pgvector:0.8.5-pg15-trixie
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.pg
+    command: postgres -c shared_preload_libraries=pg_textsearch,zhparser
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-go_stock}
+      POSTGRES_DB: ${POSTGRES_DB:-stockmate}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-go_stock}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-stockmate}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,6 +31,8 @@ services:
       - ./logs:/app/logs
     environment:
       LOG_SERVICE_NAME: backend
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/stockmate
+      REDIS_URL: redis://redis:6379/0
     env_file:
       - .env
     depends_on:
@@ -37,7 +40,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -55,6 +58,8 @@ services:
       - ./logs:/app/logs
     environment:
       LOG_SERVICE_NAME: agent-worker
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/stockmate
+      REDIS_URL: redis://redis:6379/0
     env_file:
       - .env
     depends_on:
@@ -74,6 +79,8 @@ services:
       - ./logs:/app/logs
     environment:
       LOG_SERVICE_NAME: scheduler-worker
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/stockmate
+      REDIS_URL: redis://redis:6379/0
     env_file:
       - .env
     depends_on:
@@ -113,7 +120,11 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
+    deploy:
+      resources:
+        limits:
+          memory: 32M
     depends_on:
       - backend
       - frontend

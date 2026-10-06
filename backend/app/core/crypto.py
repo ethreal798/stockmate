@@ -74,7 +74,7 @@ class SecretCipher:
         if not key_material:
             if not settings.DEBUG:
                 raise SecretCipherError("AI_MODEL_CONFIG_ENCRYPTION_KEY 环境变量必须设置")
-            key_material = "debug-only-python-stock-ai-model-config-key"
+            key_material = "debug-only-stockmate-ai-model-config-key"
 
         decoded = self._try_b64decode(key_material)
         if decoded and len(decoded) == 32:
