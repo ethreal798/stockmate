@@ -90,7 +90,7 @@ export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
 
       try {
         const method = options?.method ?? "POST";
-        
+
         const headers: Record<string, string> = {
           Accept: "text/event-stream",
           ...(options?.headers ?? {}),
@@ -197,7 +197,7 @@ export const useSSE = (options: UseSSEOptions = {}): UseSSEReturn => {
         }
 
         // 流正常结束：flush decoder 获取 UTF-8 多字节序列尾
-        buffer += (decoder as unknown as { flush: () => string }).flush();
+        buffer += decoder.decode();
         // 派发最后一个残块（如果没等来双换行）
         if (buffer.trim()) {
           processEventBlock(buffer);
